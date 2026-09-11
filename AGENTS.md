@@ -119,24 +119,64 @@ opened the patch logs once and drops snapshots rather than affecting the game.
 
 Dedicated servers never refill a wiped ranch, and abandoned/removed vehicles
 stay gone or accumulate. This patch tracks both in a small SQLite database,
-`puxadinho_world.db`, beside the save, and refreshes them server-side.
+`puxadinho_world.db`, beside the save, and recycles them server-side.
+
+Ranch respawn and vehicle respawn are independent halves of this patch.
+
+**Ranch:** a throttled scan of animal zones. A ranch with no live animals for
+48 in-game hours gets `RandomizedRanchBase.randomizeRanch(zone, dzone)` re-run
+on its existing zone/dzone (never `checkRanchStory`, which would duplicate the
+zone).
+
+**Vehicles (ticket system, modelled on the VLCS HDRcade mod):**
 
 | Class | Method | Injected behavior |
 |-------|--------|-------------------|
-| `zombie.iso.areas.DesignationZone` | `update` | throttled scan of animal zones; a ranch with no live animals for 48 in-game hours gets `RandomizedRanchBase.randomizeRanch(zone, dzone)` re-run on its existing zone/dzone (never `checkRanchStory`, which would duplicate the zone) |
-| `zombie.vehicles.VehicleManager` | `serverUpdate` | throttled (1 s) scan of loaded vehicles; records each vehicle's script/position by `sqlId`, updates `last_seen` while a player is within 2 chunks, and refreshes (`permanentlyRemove` + respawn same script at the same spot) once `last_seen` is 7 in-game days old |
-| `zombie.vehicles.BaseVehicle` | `permanentlyRemove` | queues a same-script respawn at the recorded location when a vehicle is deleted by anything other than our own refresh |
+| `zombie.iso.areas.DesignationZone` | `update` | drives the throttled ranch scan above |
+| `zombie.vehicles.VehicleManager` | `serverUpdate` | throttled (1 s) vehicle scan: stamps `last_seen` for vehicles within `VehicleRespawnChunks` of a player, hands vehicles unseen for `VehicleRespawnDays` to the janitor, and periodically spends tickets to spawn new vehicles near a random online player |
+| `zombie.vehicles.BaseVehicle` | `permanentlyRemove` | grants one ticket for every vehicle removal (burnt-wreck removal, admin `/remove`, a future dismantle mod, or the janitor) |
 
-Respawn reuses the vanilla `/addvehicle` path: `new BaseVehicle(cell)`,
-`setScriptName`, position, `setSquare`, `chunk.vehicles.add`, `addToWorld`,
-`VehiclesDB2.addVehicle`, key and `repair`. This gives correct multiplayer sync
-through the normal `VehicleFullUpdate` stream. State is stored in
-`ranch(x, y, z, zero_hour)` and `vehicles(sql_id, script, x, y, z, last_seen)`.
+A ticket is the currency of the system: removals earn tickets, and the
+scheduler spends them. Every `VehicleRespawnDays` the janitor removes vehicles
+with no nearby player (this grants a ticket). Every `VehicleSpawnFreqDays`
+(default 1; `0` = hourly) the server takes up to `VehicleSpawnBatchSize`
+tickets and, for each, picks the next online player round-robin and scans the
+loaded chunks around them for a valid tile.
+
+The scan is a server-side, zone-based replacement for the mod's client scan.
+The map's predefined vehicle zones are declared in `media/maps/<map>/objects.lua`
+as `{ name = "...", type = "ParkingStall" | "Vehicle", x, y, z, width, height }`
+(the `name`, not the type, selects the distribution). The engine parses them all
+into `IsoMetaGrid.vehiclesZones`; the agent deduplicates that list and writes it
+to `puxadinho_vehicle_zones.txt` beside the save (`VehicleZoneCache`). Spawning
+then gathers the cached zones within `VehicleSpawnMaxDistance` of the chosen
+player, picks a random loaded one and a random tile inside it, and validates a
+3x5 or 5x2 footprint (loaded, free, no tree/room, not intersecting a vehicle,
+not a safehouse). No random tile probing across the map. The vehicle type is
+chosen with the vanilla zone distribution (`VehicleType.getRandomVehicleType`),
+which also applies the vanilla burnt-car chance. The facing comes from the
+zone's `Direction` property (cached with each zone; falls back to the zone's
+long axis), and placement mirrors vanilla `IsoChunk.AddVehicles_OnZone`: the
+cross axis is centred on a tile inside the zone and the length axis is anchored
+half a vehicle length from the zone edge (N/S from top/bottom, W/E from
+left/right). The spawn sets the vanilla rotation quaternion and rejects
+positions that collide with a nearby vehicle (`testCollisionWithVehicle`), so
+vehicles no longer stack or hang outside the stall. Only tiles in chunks the
+server currently has loaded are accepted, so spawns always land in loaded
+territory.
+Spawn reuses the vanilla path: `new BaseVehicle(cell)`, `setScriptName`,
+`setScript`, `setZone`, `setVehicleType`, `setDir`, position, `setSquare`,
+`chunk.vehicles.add`, `addToWorld`, `VehiclesDB2.addVehicle`, key and `repair`.
+This gives correct multiplayer sync through the normal `VehicleFullUpdate`
+stream. State is stored in `ranch(x, y, z, zero_hour)`,
+`vehicles(sql_id, script, x, y, z, last_seen)` and `state(key, value)` (tickets,
+last spawn hour, round-robin index).
 
 Known limits: the game clock pauses on an empty server (`PauseEmpty`), so
-timers only advance while someone is online; map-placed burnt/smashed wrecks
-are not treated as "destroyed"; and an admin `/remove vehicles` will be
-replaced like any other deletion. Vehicle behavior needs live-server testing.
+timers only advance while someone is online. B42 has no vanilla way to remove
+an intact normal vehicle, so that source of tickets requires the planned
+client-side dismantle mod (which will call `permanentlyRemove` and therefore
+work through the same hook).
 
 ### Patch 5 — safehouse item protection (`patches/safehouse`)
 
@@ -178,7 +218,12 @@ RanchRespawnHours = 48
 VehicleRespawnEnabled = true
 VehicleRespawnDays = 7
 VehicleRespawnChunks = 2
-VehicleRespawnOnDelete = true
+VehicleTicketSystem = true
+VehicleMaxTickets = 30
+VehicleSpawnFreqDays = 1
+VehicleSpawnBatchSize = 5
+VehicleSpawnMinDistance = 55
+VehicleSpawnMaxDistance = 250
 
 StatsEnabled = true
 
@@ -190,9 +235,13 @@ DebugLogging = false
 `Config.load()` is lazy and safe to call from any patch; it no-ops until
 `ZomboidFileSystem` is ready. Respawn times are in-world hours/days, so the
 same `PauseEmpty` caveat applies. `VehicleRespawnChunks` is the radius (1
-chunk = 8 tiles) that counts as a player being near a vehicle;
-`VehicleRespawnOnDelete` toggles whether destroyed/removed vehicles are
-replaced. `StatsEnabled` gates patch 3.
+chunk = 8 tiles) that counts as a player being near a vehicle and therefore
+keeps it from being aged out. `VehicleTicketSystem` gates whether spawns
+require a ticket; `VehicleMaxTickets` caps the ledger; `VehicleSpawnFreqDays`
+is how often tickets are spent (`0` = hourly); `VehicleSpawnBatchSize` is the
+number of spawn attempts per tick; `VehicleSpawnMinDistance` and
+`VehicleSpawnMaxDistance` bound the tiles search from the chosen player.
+`StatsEnabled` gates patch 3.
 
 `DebugLogging` is the master switch for all informational logging from every
 patch. When false the agent is silent except for genuine errors (which always
@@ -302,6 +351,8 @@ java/
       respawn/
         WorldRespawnPatch.java
         RespawnGuard.java
+        VehicleSpawnSite.java            # picks a loaded predefined vehicle zone + tile
+        VehicleZoneCache.java            # parses/caches IsoMetaGrid.vehiclesZones to a file
       safehouse/
         SafehouseItemPatch.java
         SafehouseGuard.java

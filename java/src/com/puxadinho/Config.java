@@ -14,7 +14,12 @@ public final class Config {
     public static boolean vehicleRespawnEnabled = true;
     public static double vehicleRespawnDays = 7.0;
     public static int vehicleRespawnChunks = 2;
-    public static boolean vehicleRespawnOnDelete = true;
+    public static boolean vehicleTicketSystem = true;
+    public static int vehicleMaxTickets = 30;
+    public static double vehicleSpawnFreqDays = 1.0;
+    public static int vehicleSpawnBatchSize = 5;
+    public static int vehicleSpawnMinDistance = 55;
+    public static int vehicleSpawnMaxDistance = 250;
     public static boolean safehouseItemProtection = true;
     public static int safehouseProtectionMargin = 0;
     public static boolean statsEnabled = true;
@@ -40,27 +45,52 @@ public final class Config {
         RanchRespawnHours = 48
 
         # ------------------------------- Vehicles ----------------------------------
+        #
+        # Ticket-based vehicle respawn, modelled on the "VLCS HDRcade" mod:
+        # removing a vehicle (burnt wreck removal, admin removal, a future
+        # dismantle mod, or the abandonment janitor) adds a ticket; periodically
+        # the server spends tickets to spawn a new zone-appropriate vehicle near a
+        # random online player.
 
-        # Enable or disable vehicle respawning entirely.
-        #   true  = abandoned/destroyed vehicles are replaced with a fresh one.
+        # Enable or disable the vehicle system entirely.
+        #   true  = abandoned/removed vehicles are recycled into new spawns.
         #   false = vanilla behaviour (vehicles are never auto-replaced).
         VehicleRespawnEnabled = true
 
-        # How many in-game days a vehicle must have no player nearby before it is
-        # deleted and a new vehicle of the same script is spawned in the same spot.
+        # How many in-game days a vehicle must have no player nearby before the
+        # janitor removes it (the removal then grants a ticket).
         #   7 = one in-game week.
         VehicleRespawnDays = 7
 
-        # Radius, in chunks, that counts as a player being "near" a vehicle. The
-        # abandonment timer only runs while no player is within this many chunks.
+        # Radius, in chunks, that counts as a player being "near" a vehicle. A
+        # vehicle within this range is considered in use and is not aged out.
         #   1 chunk = 8 tiles, so 2 = 16 tiles.
         VehicleRespawnChunks = 2
 
-        # Also replace vehicles that were destroyed or removed (explosions, debug
-        # menu, admin /remove) instead of only long-abandoned ones.
-        #   true  = destroyed vehicles respawn.
-        #   false = only vehicles abandoned for VehicleRespawnDays respawn.
-        VehicleRespawnOnDelete = true
+        # Master switch for the ticket ledger.
+        #   true  = spawns require and consume a ticket (tickets are earned from
+        #           vehicle removals and capped by VehicleMaxTickets).
+        #   false = spawns happen on schedule regardless (maintenance mode).
+        VehicleTicketSystem = true
+
+        # Highest number of stored tickets. Further removals while full are lost.
+        VehicleMaxTickets = 30
+
+        # How often the server spends tickets to spawn vehicles. 0 = once per
+        # in-game hour. 1 = once per in-game day.
+        VehicleSpawnFreqDays = 1
+
+        # How many spawns to attempt per schedule tick.
+        VehicleSpawnBatchSize = 5
+
+        # Minimum distance, in tiles, between a spawned vehicle and the player it
+        # is spawned near. The search then uses vanilla-style rings out to the
+        # loaded chunks around that player.
+        VehicleSpawnMinDistance = 55
+
+        # Maximum distance, in tiles, from the chosen player to a predefined
+        # vehicle zone. Spawns still require the zone chunk to be loaded.
+        VehicleSpawnMaxDistance = 250
 
         # ------------------------------ Player stats -------------------------------
 
@@ -126,7 +156,12 @@ public final class Config {
         vehicleRespawnEnabled = bool(properties, "VehicleRespawnEnabled", vehicleRespawnEnabled);
         vehicleRespawnDays = number(properties, "VehicleRespawnDays", vehicleRespawnDays);
         vehicleRespawnChunks = (int)number(properties, "VehicleRespawnChunks", vehicleRespawnChunks);
-        vehicleRespawnOnDelete = bool(properties, "VehicleRespawnOnDelete", vehicleRespawnOnDelete);
+        vehicleTicketSystem = bool(properties, "VehicleTicketSystem", vehicleTicketSystem);
+        vehicleMaxTickets = (int)number(properties, "VehicleMaxTickets", vehicleMaxTickets);
+        vehicleSpawnFreqDays = number(properties, "VehicleSpawnFreqDays", vehicleSpawnFreqDays);
+        vehicleSpawnBatchSize = (int)number(properties, "VehicleSpawnBatchSize", vehicleSpawnBatchSize);
+        vehicleSpawnMinDistance = (int)number(properties, "VehicleSpawnMinDistance", vehicleSpawnMinDistance);
+        vehicleSpawnMaxDistance = (int)number(properties, "VehicleSpawnMaxDistance", vehicleSpawnMaxDistance);
         safehouseItemProtection = bool(properties, "SafehouseItemProtection", safehouseItemProtection);
         safehouseProtectionMargin = (int)number(properties, "SafehouseProtectionMargin", safehouseProtectionMargin);
         statsEnabled = bool(properties, "StatsEnabled", statsEnabled);
