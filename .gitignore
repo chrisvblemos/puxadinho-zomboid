@@ -1,0 +1,12 @@
+.gradle
+.project
+.settings
+
+build/
+bin/
+out3/
+
+*.class
+*.log
+*.tmp
+*.swp

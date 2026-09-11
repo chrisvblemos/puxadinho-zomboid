@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+}
+
+def PZ_GAME_DIR = System.getenv('PZ_GAME_DIR') ?: (file('/mnt/d/SteamLibrary/steamapps/common/ProjectZomboid').exists() ? '/mnt/d/SteamLibrary/steamapps/common/ProjectZomboid' : 'D:/SteamLibrary/steamapps/common/ProjectZomboid')
+
+group = 'com.puxadinho'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly files("${PZ_GAME_DIR}/projectzomboid.jar")
+    implementation 'org.ow2.asm:asm:9.8'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+            include '**/*.java'
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.incremental = false
+    options.generatedSourceOutputDirectory.set(provider { null })
+    options.headerOutputDirectory.set(provider { null })
+}
+
+jar {
+    archiveBaseName = 'Puxadinho'
+    archiveVersion = ''
+    archiveClassifier = ''
+    manifest {
+        attributes(
+            'Premain-Class': 'com.puxadinho.Agent',
+            'Agent-Class': 'com.puxadinho.Agent',
+            'Can-Retransform-Classes': 'true',
+            'Can-Redefine-Classes': 'true'
+        )
+    }
+    from({
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }) {
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/MANIFEST.MF', 'module-info.class'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named("build") {
+    finalizedBy("cleanup")
+}
+
+tasks.register("cleanup") {
+    doLast {
+        delete "${buildDir}/tmp"
+        delete "${buildDir}/classes"
+    }
+}
