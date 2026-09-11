@@ -20,6 +20,8 @@ Current patches:
    player within 2 chunks for 7 in-game days (or were removed).
 5. **Safehouse item protection** — stops the sandbox dropped-item removal timer
    from deleting world items whose square is inside a safehouse.
+6. **Death notifications** — announces every player death to server chat with a
+   message chosen by the cause of death, fully configurable per cause.
 
 ## Architecture
 
@@ -33,9 +35,12 @@ public interface Patch {
 }
 ```
 
-`PatchTransformer` holds the list of patches and dispatches each loaded class to
-the first patch that claims it. Adding a fix means adding one file and one line
-in `PatchTransformer`; patches never touch each other's code. The only bundled
+`PatchTransformer` holds the list of patches and applies **every** patch that
+claims a loaded class, in list order, feeding each one the bytes produced by the
+previous patch. This lets independent patches hook the same method (e.g. the
+stats and death-notification patches both hook `IsoPlayer.onKilled`) without
+knowing about each other. Adding a fix means adding one file and one line in
+`PatchTransformer`; patches never touch each other's code. The only bundled
 library is ASM (`org.ow2.asm:asm`), shaded into the agent jar.
 
 ### Patch 1 — zombie duplication (`patches/zombie`)
@@ -82,7 +87,7 @@ online survivor and appends immutable snapshots to a separate SQLite database,
 | Class | Method | Injected behavior |
 |-------|--------|-------------------|
 | `zombie.savefile.ServerPlayerDB` | `serverUpdateNetworkCharacter` | queues a snapshot each time the server saves a player (every ~3 min per player, plus world saves, login/character creation and disconnect) |
-| `zombie.characters.IsoPlayer` | `onKilled` | queues a final snapshot plus a `player_deaths` row (killer, weapon, illness cause, PvP flag) and announces the cause to server chat for both PvP and non-PvP deaths |
+| `zombie.characters.IsoPlayer` | `onKilled` | queues a final snapshot plus a `player_deaths` row (killer, weapon, illness cause, PvP flag) |
 | `zombie.core.raknet.UdpConnection` | `setFullyConnected` | records the login timestamp used for `last_logon` |
 
 `StatsGuard` reads the game state on the server thread (the only safe place to
@@ -101,9 +106,9 @@ the patch only needs `COMPUTE_MAXS`. Schema:
 - `player_deaths` — one row per death keyed to `player_stats.id`: timestamp,
   `x/y/z`, `killer_name`, `killer_username`, `killer_type`
   (`player`/`zombie`/`animal`/`fire`/`fall`/`infection`/`wound`/`food`/
-  `poison`/`thirst`/`hunger`/`sickness`/`environment`), `weapon`, `cause`, a
-  `pvp` flag and the same seven illness columns. Every player death is also
-  announced to server chat as `<name> <cause>`.
+  `poison`/`thirst`/`hunger`/`sickness`/`environment`), `weapon`, `cause` (the
+  machine cause key, same vocabulary as `killer_type`; the human-readable chat
+  wording lives in patch 6), a `pvp` flag and the same seven illness columns.
 
 For illness deaths (no attacker), `killer_type` is inferred from
 `BodyDamage.isInfected()` / `ZOMBIE_INFECTION` (zombie virus), then wound
@@ -204,6 +209,40 @@ this is intentional. `ItemSpawner` sets the same vanilla bit for loot-respawn
 items, which is why the protection is permanent rather than a separable state.
 Gated by `SafehouseItemProtection` in `Puxadinho.ini`.
 
+### Patch 6 — death notifications (`patches/death`)
+
+Announces every player death to server chat with a message chosen by the cause
+of death. This used to be baked into the stats patch; it is now separate so the
+wording can be configured (or disabled) without touching `puxadinho_stats.db`.
+
+| Class | Method | Injected behavior |
+|-------|--------|-------------------|
+| `zombie.characters.IsoPlayer` | `onKilled` | classifies the cause of death and sends the matching configured message to server chat |
+
+Cause classification is identical to the stats patch: the killer object
+(`IsoPlayer` / `IsoZombie` / animal), then `isOnFire` / `isKilledByFall`, then
+the illness vitals (zombie infection, wound infection, food sickness, poison,
+thirst, hunger, sickness), falling back to `environment`. The resulting key
+(`player`, `zombie`, `animal`, `fire`, `fall`, `infection`, `wound`, `food`,
+`poison`, `thirst`, `hunger`, `sickness`, `environment`) selects the message
+template `DeathMessage<Cause>` from `Puxadinho.ini`.
+
+Each template may use these placeholders:
+
+| Placeholder | Expands to |
+|-------------|-----------|
+| `{player}` | character name, plus username in parentheses when known: `John Doe (steamuser)` |
+| `{name}` | character name only |
+| `{username}` | account username only (empty if unknown) |
+| `{killer}` | `a zombie`, `an animal`, a player's character name, or empty |
+| `{weapon}` | weapon name (empty if none) |
+| `{weapon_suffix}` | `" (Weapon)"` when a weapon was used, otherwise empty |
+| `{survived}` | survival time, e.g. `7 days 18 hours` or `1 month 2 days 3 hours` (a month is 30 days; under an hour reads `less than an hour`) |
+| `{cause}` | the machine cause key |
+
+The message is sent with `ChatServer.sendMessageToServerChat` only on the
+server. Gated by `DeathMessagesEnabled` in `Puxadinho.ini`.
+
 ## Configuration
 
 On first use the agent writes `Puxadinho.ini` to the Zomboid cache
@@ -227,6 +266,21 @@ VehicleSpawnMaxDistance = 250
 
 StatsEnabled = true
 
+DeathMessagesEnabled = true
+DeathMessagePlayer = {player} was killed by {killer}{weapon_suffix} - survived {survived}. F
+DeathMessageZombie = {player} was killed by {killer} - survived {survived}. F
+DeathMessageAnimal = {player} was killed by {killer} - survived {survived}. F
+DeathMessageFire = {player} burned to death - survived {survived}. F
+DeathMessageFall = {player} died in a fall - survived {survived}. F
+DeathMessageInfection = {player} turned after being infected - survived {survived}. F
+DeathMessageWound = {player} died of wound infection - survived {survived}. F
+DeathMessageFood = {player} died of food poisoning - survived {survived}. F
+DeathMessagePoison = {player} died of poison - survived {survived}. F
+DeathMessageThirst = {player} died of thirst - survived {survived}. F
+DeathMessageHunger = {player} died of hunger - survived {survived}. F
+DeathMessageSickness = {player} died of sickness - survived {survived}. F
+DeathMessageEnvironment = {player} died - survived {survived}. F
+
 SafehouseItemProtection = true
 
 DebugLogging = false
@@ -241,7 +295,11 @@ require a ticket; `VehicleMaxTickets` caps the ledger; `VehicleSpawnFreqDays`
 is how often tickets are spent (`0` = hourly); `VehicleSpawnBatchSize` is the
 number of spawn attempts per tick; `VehicleSpawnMinDistance` and
 `VehicleSpawnMaxDistance` bound the tiles search from the chosen player.
-`StatsEnabled` gates patch 3.
+`StatsEnabled` gates patch 3. `DeathMessagesEnabled` gates patch 6; the
+`DeathMessage<Cause>` values are chat templates using the placeholders listed
+above. The ini is written and read as UTF-8, so non-ASCII message text is safe.
+The death-message defaults are English, but every cause can be reworded (for
+example back into Portuguese) per server.
 
 `DebugLogging` is the master switch for all informational logging from every
 patch. When false the agent is silent except for genuine errors (which always
@@ -313,10 +371,11 @@ With `DebugLogging = true` in `Puxadinho.ini`, the first lines of
 ```
 
 If that fingerprint does not match the jar you deployed, the wrong agent is
-being loaded (check the `-javaagent` argument). If a class fails to transform,
-the agent logs `[Puxadinho] PATCH FAILED <PatchName> for <class>:` and leaves
-that class untouched. When `DebugLogging = false` the agent is silent except
-for those errors.
+being loaded (check the `-javaagent` argument). If a patch fails to transform a
+class, the agent logs `[Puxadinho] PATCH FAILED <PatchName> for <class>:` and
+continues with the remaining patches (any changes already applied by earlier
+patches are kept). When `DebugLogging = false` the agent is silent except for
+those errors.
 
 ## Adding a patch
 
@@ -336,7 +395,7 @@ java/
     Agent.java                          # premain, installs PatchTransformer
     Config.java                         # Puxadinho.ini loader/defaults
     Patch.java                          # patch interface
-    PatchTransformer.java               # class -> patch dispatch
+    PatchTransformer.java               # class -> matching patches (chained)
     asm/
       ClassWriters.java                 # loader-aware ClassWriter
     patches/
@@ -348,6 +407,9 @@ java/
       stats/
         PlayerStatsPatch.java
         StatsGuard.java
+      death/
+        DeathMessagePatch.java
+        DeathMessageGuard.java
       respawn/
         WorldRespawnPatch.java
         RespawnGuard.java

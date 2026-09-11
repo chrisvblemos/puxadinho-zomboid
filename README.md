@@ -19,6 +19,7 @@ configuration and install instructions.
 | 3 | **Player statistics** | Persists a time-series of every survivor's progress (kills, hours survived, position, health, infection, inventory, skills) and every death to SQLite, surviving character death. |
 | 4 | **World respawn** | Refills a ranch's herd once it has been empty for 48 in-game hours, and runs a ticket-based vehicle economy: removed/abandoned vehicles earn tickets, which the server spends to spawn zone-appropriate vehicles near random players. |
 | 5 | **Safehouse item protection** | Stops the sandbox dropped-item cleanup from deleting world items dropped inside a safehouse. |
+| 6 | **Death notifications** | Announces every player death to server chat, with a fully configurable message per cause of death (including character name, username and survival time). |
 
 ## Quick start
 

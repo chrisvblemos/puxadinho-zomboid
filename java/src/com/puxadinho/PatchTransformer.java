@@ -10,6 +10,7 @@ public final class PatchTransformer implements ClassFileTransformer {
         new com.puxadinho.patches.zombie.ZombieDuplicationPatch(),
         new com.puxadinho.patches.ranch.RanchAnimalAgePatch(),
         new com.puxadinho.patches.stats.PlayerStatsPatch(),
+        new com.puxadinho.patches.death.DeathMessagePatch(),
         new com.puxadinho.patches.respawn.WorldRespawnPatch(),
         new com.puxadinho.patches.safehouse.SafehouseItemPatch()
     );
@@ -27,6 +28,8 @@ public final class PatchTransformer implements ClassFileTransformer {
         if (className == null) {
             return null;
         }
+        byte[] current = buffer;
+        boolean changed = false;
         for (int i = 0; i < PATCHES.size(); i++) {
             Patch patch = PATCHES.get(i);
             if (!patch.matches(className)) {
@@ -35,16 +38,19 @@ public final class PatchTransformer implements ClassFileTransformer {
             String patchName = patch.getClass().getSimpleName();
             try {
                 Debug.log("transforming " + className + " with " + patchName
-                    + " (" + buffer.length + " bytes in)");
-                byte[] result = patch.transform(loader, className, buffer);
+                    + " (" + current.length + " bytes in)");
+                byte[] result = patch.transform(loader, className, current);
+                if (result == null) {
+                    continue;
+                }
                 Debug.log("transformed " + className + " with " + patchName
-                    + " (" + buffer.length + " -> " + (result == null ? 0 : result.length) + " bytes)");
-                return result;
+                    + " (" + current.length + " -> " + result.length + " bytes)");
+                current = result;
+                changed = true;
             } catch (Throwable t) {
                 Debug.error("PATCH FAILED " + patchName + " for " + className + ": " + t);
-                return null;
             }
         }
-        return null;
+        return changed ? current : null;
     }
 }

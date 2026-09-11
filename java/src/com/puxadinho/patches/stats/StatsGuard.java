@@ -32,7 +32,6 @@ import zombie.inventory.ItemContainer;
 import zombie.inventory.types.HandWeapon;
 import zombie.inventory.types.InventoryContainer;
 import zombie.network.GameServer;
-import zombie.network.chat.ChatServer;
 
 public final class StatsGuard {
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -98,7 +97,6 @@ public final class StatsGuard {
                 killerName = "";
             }
             String weaponName = weapon == null || weapon.getName() == null ? "" : weapon.getName();
-            String cause = cause(killerType, killerName, weaponName);
             QUEUE.add(snap);
             QUEUE.add(new Death(
                 snap.world(),
@@ -114,12 +112,11 @@ public final class StatsGuard {
                 killerUsername,
                 killerType,
                 weaponName,
-                cause,
+                killerType,
                 "player".equals(killerType) ? 1 : 0,
                 snap.vitals()
             ));
             start();
-            ChatServer.getInstance().sendMessageToServerChat(snap.name() + " " + cause);
         } catch (Throwable t) {
             Debug.error("death log failed: " + t);
         }
@@ -201,37 +198,6 @@ public final class StatsGuard {
 
     private static String name(IsoPlayer player) {
         return player.getDescriptor().getForename() + " " + player.getDescriptor().getSurname();
-    }
-
-    private static String cause(String killerType, String killerName, String weapon) {
-        switch (killerType) {
-            case "player":
-                return "foi morto por " + killerName + (weapon.isEmpty() ? "" : " (" + weapon + ")");
-            case "zombie":
-                return "foi morto por um zumbi. F";
-            case "animal":
-                return "foi morto por um animal, lol. F";
-            case "fire":
-                return "morreu queimado. F";
-            case "fall":
-                return "caiu duro no chão. F";
-            case "infection":
-                return "morreu zumbificado. F";
-            case "wound":
-                return "morreu de infecção. F";
-            case "food":
-                return "comeu um podrão e morreu. F";
-            case "poison":
-                return "morreu envenenado. F";
-            case "thirst":
-                return "morreu de sede. F";
-            case "hunger":
-                return "morreu de fome. F";
-            case "sickness":
-                return "morreu de doença. F";
-            default:
-                return "morreu. F";
-        }
     }
 
     private static String inventory(ItemContainer container) {

@@ -3,6 +3,7 @@ package com.puxadinho;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
@@ -23,6 +24,20 @@ public final class Config {
     public static boolean safehouseItemProtection = true;
     public static int safehouseProtectionMargin = 0;
     public static boolean statsEnabled = true;
+    public static boolean deathMessagesEnabled = true;
+    public static String deathMessagePlayer = "{player} was killed by {killer}{weapon_suffix} - survived {survived}. F";
+    public static String deathMessageZombie = "{player} was killed by {killer} - survived {survived}. F";
+    public static String deathMessageAnimal = "{player} was killed by {killer} - survived {survived}. F";
+    public static String deathMessageFire = "{player} burned to death - survived {survived}. F";
+    public static String deathMessageFall = "{player} died in a fall - survived {survived}. F";
+    public static String deathMessageInfection = "{player} turned after being infected - survived {survived}. F";
+    public static String deathMessageWound = "{player} died of wound infection - survived {survived}. F";
+    public static String deathMessageFood = "{player} died of food poisoning - survived {survived}. F";
+    public static String deathMessagePoison = "{player} died of poison - survived {survived}. F";
+    public static String deathMessageThirst = "{player} died of thirst - survived {survived}. F";
+    public static String deathMessageHunger = "{player} died of hunger - survived {survived}. F";
+    public static String deathMessageSickness = "{player} died of sickness - survived {survived}. F";
+    public static String deathMessageEnvironment = "{player} died - survived {survived}. F";
     public static boolean debugLogging = false;
 
     private static final String DEFAULTS = """
@@ -99,6 +114,55 @@ public final class Config {
         #   false = no stat tracking and no database writes.
         StatsEnabled = true
 
+        # ---------------------------- Death messages -------------------------------
+
+        # Announce every player death to server chat with a message chosen by the
+        # cause of death. Each message is a template; the placeholders below are
+        # replaced when the death is announced:
+        #   {player}         = character name, plus the account username in
+        #                      parentheses when known: "John Doe (steamuser)"
+        #   {name}           = character name only
+        #   {username}       = account username only (empty if unknown)
+        #   {killer}         = killer or cause name ("a zombie", "an animal", a
+        #                      player's character name; empty for other causes)
+        #   {weapon}         = weapon name (empty when there is no weapon)
+        #   {weapon_suffix}  = " (Weapon)" when a weapon was used, otherwise empty
+        #   {survived}       = time the character survived, e.g. "7 days 18 hours"
+        #                      or "1 month 2 days 3 hours" (a month is 30 days)
+        #   {cause}          = machine cause key (see the list below)
+        #
+        # One message per cause key:
+        #   DeathMessagePlayer      - killed by another player
+        #   DeathMessageZombie      - killed by a zombie
+        #   DeathMessageAnimal      - killed by an animal
+        #   DeathMessageFire        - burned to death
+        #   DeathMessageFall        - died in a fall
+        #   DeathMessageInfection   - died of the zombie infection
+        #   DeathMessageWound       - died of a wound infection
+        #   DeathMessageFood        - died of food sickness
+        #   DeathMessagePoison      - died of poison
+        #   DeathMessageThirst      - died of thirst
+        #   DeathMessageHunger      - died of hunger
+        #   DeathMessageSickness    - died of general sickness
+        #   DeathMessageEnvironment - any other cause
+        #   true  = announce player deaths in server chat.
+        #   false = no death announcements (statistics are unaffected).
+        DeathMessagesEnabled = true
+
+        DeathMessagePlayer = {player} was killed by {killer}{weapon_suffix} - survived {survived}. F
+        DeathMessageZombie = {player} was killed by {killer} - survived {survived}. F
+        DeathMessageAnimal = {player} was killed by {killer} - survived {survived}. F
+        DeathMessageFire = {player} burned to death - survived {survived}. F
+        DeathMessageFall = {player} died in a fall - survived {survived}. F
+        DeathMessageInfection = {player} turned after being infected - survived {survived}. F
+        DeathMessageWound = {player} died of wound infection - survived {survived}. F
+        DeathMessageFood = {player} died of food poisoning - survived {survived}. F
+        DeathMessagePoison = {player} died of poison - survived {survived}. F
+        DeathMessageThirst = {player} died of thirst - survived {survived}. F
+        DeathMessageHunger = {player} died of hunger - survived {survived}. F
+        DeathMessageSickness = {player} died of sickness - survived {survived}. F
+        DeathMessageEnvironment = {player} died - survived {survived}. F
+
         # ---------------------------- Safehouse items ------------------------------
 
         # Keep dropped world items from being deleted by the sandbox item-removal
@@ -140,7 +204,7 @@ public final class Config {
         Properties properties = new Properties();
         if (file.exists()) {
             try (FileInputStream in = new FileInputStream(file)) {
-                properties.load(in);
+                properties.load(new InputStreamReader(in, StandardCharsets.UTF_8));
             } catch (Throwable t) {
                 Debug.error("failed to read " + file + ": " + t);
             }
@@ -165,6 +229,20 @@ public final class Config {
         safehouseItemProtection = bool(properties, "SafehouseItemProtection", safehouseItemProtection);
         safehouseProtectionMargin = (int)number(properties, "SafehouseProtectionMargin", safehouseProtectionMargin);
         statsEnabled = bool(properties, "StatsEnabled", statsEnabled);
+        deathMessagesEnabled = bool(properties, "DeathMessagesEnabled", deathMessagesEnabled);
+        deathMessagePlayer = string(properties, "DeathMessagePlayer", deathMessagePlayer);
+        deathMessageZombie = string(properties, "DeathMessageZombie", deathMessageZombie);
+        deathMessageAnimal = string(properties, "DeathMessageAnimal", deathMessageAnimal);
+        deathMessageFire = string(properties, "DeathMessageFire", deathMessageFire);
+        deathMessageFall = string(properties, "DeathMessageFall", deathMessageFall);
+        deathMessageInfection = string(properties, "DeathMessageInfection", deathMessageInfection);
+        deathMessageWound = string(properties, "DeathMessageWound", deathMessageWound);
+        deathMessageFood = string(properties, "DeathMessageFood", deathMessageFood);
+        deathMessagePoison = string(properties, "DeathMessagePoison", deathMessagePoison);
+        deathMessageThirst = string(properties, "DeathMessageThirst", deathMessageThirst);
+        deathMessageHunger = string(properties, "DeathMessageHunger", deathMessageHunger);
+        deathMessageSickness = string(properties, "DeathMessageSickness", deathMessageSickness);
+        deathMessageEnvironment = string(properties, "DeathMessageEnvironment", deathMessageEnvironment);
         debugLogging = bool(properties, "DebugLogging", debugLogging);
         Debug.setEnabled(debugLogging);
         Debug.logStartupOnce();
@@ -189,5 +267,10 @@ public final class Config {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    private static String string(Properties properties, String key, String fallback) {
+        String value = properties.getProperty(key);
+        return value == null ? fallback : value.trim();
     }
 }

@@ -31,7 +31,7 @@ import zombie.ZomboidFileSystem;
  * Project Zomboid's own log rotation, which stops writing after startup.
  */
 public final class Debug {
-    public static final String BUILD = "1.0.0+zone-spawn-4";
+    public static final String BUILD = "1.0.0+death-message-1";
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final String FILE_NAME = "Puxadinho-debug.log";
