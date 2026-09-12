@@ -7,7 +7,6 @@ import java.util.StringJoiner;
 
 public final class PatchTransformer implements ClassFileTransformer {
     private static final List<Patch> PATCHES = List.of(
-        new com.puxadinho.patches.zombie.ZombieDuplicationPatch(),
         new com.puxadinho.patches.ranch.RanchAnimalAgePatch(),
         new com.puxadinho.patches.stats.PlayerStatsPatch(),
         new com.puxadinho.patches.death.DeathMessagePatch(),

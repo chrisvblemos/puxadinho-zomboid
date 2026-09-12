@@ -6,25 +6,22 @@ ZombieBuddy, no `mod.info`.
 
 Current patches:
 
-1. **Zombie duplication** — the population manager accumulates duplicate records
-   for the same zombie, producing identical outfit/loot clones that respawn and
-   snowball into hundreds of zombies.
-2. **Ranch animals die off in old worlds** — once the world passes ~60 days,
+1. **Ranch animals die off in old worlds** — once the world passes ~60 days,
    ranch-spawned animals are increasingly killed on spawn; past ~190/250 days
    the chance becomes 100%, so no live animals appear.
-3. **Player stat tracking** — persists a time-series of every survivor's
+2. **Player stat tracking** — persists a time-series of every survivor's
    progress (kills, hours survived, logon times, position, health, infection,
    inventory and skills) to a SQLite database that survives character death.
-4. **Death notifications** — announces every player death to server chat with a
+3. **Death notifications** — announces every player death to server chat with a
    message chosen by the cause of death, fully configurable per cause.
-5. **Ranch respawn** — refills a ranch's animals once its herd has been wiped
+4. **Ranch respawn** — refills a ranch's animals once its herd has been wiped
    out for `RanchRespawnHours` (default 48) in-game hours.
-6. **Vehicle respawn** — a ticket-based economy: removed/abandoned vehicles earn
+5. **Vehicle respawn** — a ticket-based economy: removed/abandoned vehicles earn
    tickets, which the server spends to spawn zone-appropriate vehicles near
    random online players.
-7. **Safehouse item protection** — stops the sandbox dropped-item removal timer
+6. **Safehouse item protection** — stops the sandbox dropped-item removal timer
    from deleting world items whose square is inside a safehouse.
-8. **Server performance tracking** — samples JVM health (heap, GC, CPU, threads)
+7. **Server performance tracking** — samples JVM health (heap, GC, CPU, threads)
    alongside game state (online players, loaded zombies/animals/vehicles, world
    age) into a SQLite database so resource use can be correlated with server
    activity.
@@ -49,20 +46,7 @@ knowing about each other. Adding a fix means adding one file and one line in
 `PatchTransformer`; patches never touch each other's code. The only bundled
 library is ASM (`org.ow2.asm:asm`), shaded into the agent jar.
 
-### Patch 1 — zombie duplication (`patches/zombie`)
-
-| Class | Method | Injected behavior |
-|-------|--------|-------------------|
-| `zombie.popman.ZombiePopulationManager` | `removeChunkFromWorld` | marks every zombie in the unloading chunk as already registered |
-| `zombie.popman.ZombiePopulationManager` | `virtualizeZombie` | if already registered, removes it from the world and skips `n_addZombie`; otherwise marks it |
-| `zombie.popman.ZombiePopulationManager` | `addZombieStanding` / `addZombieMoving` | drops a population record if the same tile + direction + `persistentOutfitID` was already emitted in the current window |
-| `zombie.characters.IsoZombie` | `resetForReuse` | clears the registration mark when the object is recycled |
-
-Result: the population manager can never hold more than one record per zombie,
-and can never instantiate two zombies for the same identity. Existing saved
-duplicates collapse as their records are drained on load.
-
-### Patch 2 — ranch animal age die-off (`patches/ranch`)
+### Patch 1 — ranch animal age die-off (`patches/ranch`)
 
 In `zombie.randomizedWorld.randomizedRanch.RandomizedRanchBase.randomizeRanch`
 there is a world-age gate:
@@ -83,7 +67,7 @@ spawned animals are guaranteed to be created dead. The patch rewrites the
 entered and ranch animals always spawn alive. It only touches the two `60.0`
 loads inside `randomizeRanch`.
 
-### Patch 3 — player stat tracking (`patches/stats`)
+### Patch 2 — player stat tracking (`patches/stats`)
 
 The vanilla server keeps one live row per character in `players.db` and deletes
 it when the character dies, so there is no history. This patch samples every
@@ -114,7 +98,7 @@ the patch only needs `COMPUTE_MAXS`. Schema:
   (`player`/`zombie`/`animal`/`fire`/`fall`/`infection`/`wound`/`food`/
   `poison`/`thirst`/`hunger`/`sickness`/`environment`), `weapon`, `cause` (the
   machine cause key, same vocabulary as `killer_type`; the human-readable chat
-  wording lives in patch 4), a `pvp` flag and the same seven illness columns.
+  wording lives in patch 3), a `pvp` flag and the same seven illness columns.
 
 For illness deaths (no attacker), `killer_type` is inferred from
 `BodyDamage.isInfected()` / `ZOMBIE_INFECTION` (zombie virus), then wound
@@ -126,7 +110,7 @@ Because history is append-only, the data survives death and respawn and can
 answer "what was this player doing yesterday". If the database cannot be
 opened the patch logs once and drops snapshots rather than affecting the game.
 
-### Patch 4 — death notifications (`patches/death`)
+### Patch 3 — death notifications (`patches/death`)
 
 Announces every player death to server chat with a message chosen by the cause
 of death. This used to be baked into the stats patch; it is now separate so the
@@ -160,7 +144,7 @@ Each template may use these placeholders:
 The message is sent with `ChatServer.sendMessageToServerChat` only on the
 server. Gated by `DeathMessagesEnabled` in `Puxadinho.ini`.
 
-### Patch 5 — ranch respawn (`patches/ranch`)
+### Patch 4 — ranch respawn (`patches/ranch`)
 
 Dedicated servers never refill a wiped ranch, so it stays empty forever. This
 patch watches animal zones and re-runs the vanilla ranch randomization once a
@@ -180,7 +164,7 @@ zone/dzone (never `checkRanchStory`, which would duplicate the zone) and
 rather than retrying every tick. Gated by `RanchRespawnEnabled`. Database:
 `ranch(x, y, z, zero_hour)`.
 
-### Patch 6 — vehicle respawn (`patches/vehicles`)
+### Patch 5 — vehicle respawn (`patches/vehicles`)
 
 Abandoned/removed vehicles stay gone or accumulate on dedicated servers. This
 patch runs a ticket-based vehicle economy, modelled on the VLCS HDRcade mod:
@@ -235,7 +219,7 @@ an intact normal vehicle, so that source of tickets requires the planned
 client-side dismantle mod (which will call `permanentlyRemove` and therefore
 work through the same hook).
 
-### Patch 7 — safehouse item protection (`patches/safehouse`)
+### Patch 6 — safehouse item protection (`patches/safehouse`)
 
 The sandbox "hours for world item removal" timer culls dropped
 `IsoWorldInventoryObject`s when a square is (re)loaded, inside
@@ -261,7 +245,7 @@ this is intentional. `ItemSpawner` sets the same vanilla bit for loot-respawn
 items, which is why the protection is permanent rather than a separable state.
 Gated by `SafehouseItemProtection` in `Puxadinho.ini`.
 
-### Patch 8 — server performance tracking (`patches/perf`)
+### Patch 7 — server performance tracking (`patches/perf`)
 
 There is no server-side way to see how JVM resource use lines up with what the
 game was doing. This patch samples both every `PerfSampleSeconds` (default 60,
@@ -342,9 +326,9 @@ require a ticket; `VehicleMaxTickets` caps the ledger; `VehicleSpawnFreqDays`
 is how often tickets are spent (`0` = hourly); `VehicleSpawnBatchSize` is the
 number of spawn attempts per tick; `VehicleSpawnMinDistance` and
 `VehicleSpawnMaxDistance` bound the tiles search from the chosen player.
-`StatsEnabled` gates patch 3. `PerfStatsEnabled` gates patch 8 and
+`StatsEnabled` gates patch 2. `PerfStatsEnabled` gates patch 7 and
 `PerfSampleSeconds` is the wall-clock seconds between samples.
-`DeathMessagesEnabled` gates patch 4; the
+`DeathMessagesEnabled` gates patch 3; the
 `DeathMessage<Cause>` values are chat templates using the placeholders listed
 above. The ini is written and read as UTF-8, so non-ASCII message text is safe.
 The death-message defaults are English, but every cause can be reworded (for
@@ -452,9 +436,6 @@ java/
     asm/
       ClassWriters.java                 # loader-aware ClassWriter
     patches/
-      zombie/
-        ZombieDuplicationPatch.java
-        ZombieGuard.java
       ranch/
         RanchAnimalAgePatch.java
         RanchRespawnPatch.java
