@@ -27,7 +27,7 @@ public final class DeathMessageGuard {
 
     public static void killed(IsoPlayer victim, IsoGameCharacter killer, HandWeapon weapon) {
         Config.load();
-        if (!GameServer.server || !Config.deathMessagesEnabled || victim == null) {
+        if (!GameServer.server || !Config.deathMessagesEnabled || victim == null || victim.isAnimal()) {
             return;
         }
         try {
@@ -45,14 +45,14 @@ public final class DeathMessageGuard {
     }
 
     private static String cause(IsoPlayer victim, IsoGameCharacter killer) {
+        if (killer != null && killer.isAnimal()) {
+            return "animal";
+        }
         if (killer instanceof IsoPlayer) {
             return "player";
         }
         if (killer instanceof IsoZombie) {
             return "zombie";
-        }
-        if (killer != null && killer.isAnimal()) {
-            return "animal";
         }
         if (victim.isOnFire()) {
             return "fire";

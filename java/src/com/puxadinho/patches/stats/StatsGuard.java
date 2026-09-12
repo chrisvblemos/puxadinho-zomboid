@@ -55,7 +55,7 @@ public final class StatsGuard {
 
     public static void capture(IsoPlayer player, UdpConnection connection) {
         Config.load();
-        if (!GameServer.server || !Config.statsEnabled || player == null) {
+        if (!GameServer.server || !Config.statsEnabled || player == null || player.isAnimal()) {
             return;
         }
         try {
@@ -68,7 +68,7 @@ public final class StatsGuard {
 
     public static void killed(IsoPlayer victim, IsoGameCharacter killer, HandWeapon weapon) {
         Config.load();
-        if (!GameServer.server || !Config.statsEnabled || victim == null) {
+        if (!GameServer.server || !Config.statsEnabled || victim == null || victim.isAnimal()) {
             return;
         }
         try {
@@ -76,16 +76,16 @@ public final class StatsGuard {
             String killerUsername = "";
             String killerName = "";
             String killerType;
-            if (killer instanceof IsoPlayer player) {
+            if (killer != null && killer.isAnimal()) {
+                killerType = "animal";
+                killerName = "an animal";
+            } else if (killer instanceof IsoPlayer player) {
                 killerType = "player";
                 killerUsername = player.getUsername() == null ? "" : player.getUsername();
                 killerName = name(player);
             } else if (killer instanceof IsoZombie) {
                 killerType = "zombie";
                 killerName = "a zombie";
-            } else if (killer != null && killer.isAnimal()) {
-                killerType = "animal";
-                killerName = "an animal";
             } else if (victim.isOnFire()) {
                 killerType = "fire";
                 killerName = "fire";
@@ -223,6 +223,9 @@ public final class StatsGuard {
     }
 
     private static String skills(IsoPlayer player) {
+        if (player.getXp() == null) {
+            return "";
+        }
         StringBuilder sb = new StringBuilder();
         for (PerkFactory.Perk perk : player.getXp().xpMap.keySet()) {
             sb.append(perk.getId()).append(':').append(player.getPerkLevel(perk)).append(';');
