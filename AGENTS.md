@@ -15,13 +15,15 @@ Current patches:
 3. **Player stat tracking** — persists a time-series of every survivor's
    progress (kills, hours survived, logon times, position, health, infection,
    inventory and skills) to a SQLite database that survives character death.
-4. **World respawn** — refills a ranch's animals once its herd has been wiped
-   out for 48 in-game hours, and deletes/refreshes vehicles that have had no
-   player within 2 chunks for 7 in-game days (or were removed).
-5. **Safehouse item protection** — stops the sandbox dropped-item removal timer
-   from deleting world items whose square is inside a safehouse.
-6. **Death notifications** — announces every player death to server chat with a
+4. **Death notifications** — announces every player death to server chat with a
    message chosen by the cause of death, fully configurable per cause.
+5. **Ranch respawn** — refills a ranch's animals once its herd has been wiped
+   out for `RanchRespawnHours` (default 48) in-game hours.
+6. **Vehicle respawn** — a ticket-based economy: removed/abandoned vehicles earn
+   tickets, which the server spends to spawn zone-appropriate vehicles near
+   random online players.
+7. **Safehouse item protection** — stops the sandbox dropped-item removal timer
+   from deleting world items whose square is inside a safehouse.
 
 ## Architecture
 
@@ -108,7 +110,7 @@ the patch only needs `COMPUTE_MAXS`. Schema:
   (`player`/`zombie`/`animal`/`fire`/`fall`/`infection`/`wound`/`food`/
   `poison`/`thirst`/`hunger`/`sickness`/`environment`), `weapon`, `cause` (the
   machine cause key, same vocabulary as `killer_type`; the human-readable chat
-  wording lives in patch 6), a `pvp` flag and the same seven illness columns.
+  wording lives in patch 4), a `pvp` flag and the same seven illness columns.
 
 For illness deaths (no attacker), `killer_type` is inferred from
 `BodyDamage.isInfected()` / `ZOMBIE_INFECTION` (zombie virus), then wound
@@ -120,24 +122,71 @@ Because history is append-only, the data survives death and respawn and can
 answer "what was this player doing yesterday". If the database cannot be
 opened the patch logs once and drops snapshots rather than affecting the game.
 
-### Patch 4 — world respawn (`patches/respawn`)
+### Patch 4 — death notifications (`patches/death`)
 
-Dedicated servers never refill a wiped ranch, and abandoned/removed vehicles
-stay gone or accumulate. This patch tracks both in a small SQLite database,
-`puxadinho_world.db`, beside the save, and recycles them server-side.
-
-Ranch respawn and vehicle respawn are independent halves of this patch.
-
-**Ranch:** a throttled scan of animal zones. A ranch with no live animals for
-48 in-game hours gets `RandomizedRanchBase.randomizeRanch(zone, dzone)` re-run
-on its existing zone/dzone (never `checkRanchStory`, which would duplicate the
-zone).
-
-**Vehicles (ticket system, modelled on the VLCS HDRcade mod):**
+Announces every player death to server chat with a message chosen by the cause
+of death. This used to be baked into the stats patch; it is now separate so the
+wording can be configured (or disabled) without touching `puxadinho_stats.db`.
 
 | Class | Method | Injected behavior |
 |-------|--------|-------------------|
-| `zombie.iso.areas.DesignationZone` | `update` | drives the throttled ranch scan above |
+| `zombie.characters.IsoPlayer` | `onKilled` | classifies the cause of death and sends the matching configured message to server chat |
+
+Cause classification is identical to the stats patch: the killer object
+(`IsoPlayer` / `IsoZombie` / animal), then `isOnFire` / `isKilledByFall`, then
+the illness vitals (zombie infection, wound infection, food sickness, poison,
+thirst, hunger, sickness), falling back to `environment`. The resulting key
+(`player`, `zombie`, `animal`, `fire`, `fall`, `infection`, `wound`, `food`,
+`poison`, `thirst`, `hunger`, `sickness`, `environment`) selects the message
+template `DeathMessage<Cause>` from `Puxadinho.ini`.
+
+Each template may use these placeholders:
+
+| Placeholder | Expands to |
+|-------------|-----------|
+| `{player}` | character name, plus username in parentheses when known: `John Doe (steamuser)` |
+| `{name}` | character name only |
+| `{username}` | account username only (empty if unknown) |
+| `{killer}` | `a zombie`, `an animal`, a player's character name, or empty |
+| `{weapon}` | weapon name (empty if none) |
+| `{weapon_suffix}` | `" (Weapon)"` when a weapon was used, otherwise empty |
+| `{survived}` | survival time, e.g. `7 days 18 hours` or `1 month 2 days 3 hours` (a month is 30 days; under an hour reads `less than an hour`) |
+| `{cause}` | the machine cause key |
+
+The message is sent with `ChatServer.sendMessageToServerChat` only on the
+server. Gated by `DeathMessagesEnabled` in `Puxadinho.ini`.
+
+### Patch 5 — ranch respawn (`patches/ranch`)
+
+Dedicated servers never refill a wiped ranch, so it stays empty forever. This
+patch watches animal zones and re-runs the vanilla ranch randomization once a
+herd has been missing for `RanchRespawnHours` (default 48 in-game hours). State
+lives in `puxadinho_ranch.db` beside the save.
+
+| Class | Method | Injected behavior |
+|-------|--------|-------------------|
+| `zombie.iso.areas.DesignationZone` | `update` | drives a throttled (2.5 s) scan of `DesignationZoneAnimal` zones |
+
+The scan looks at every `AnimalZone` zone with zero connected animals, resolves
+the matching map `Ranch` zone, and arms a countdown from the first moment it was
+seen empty. Once `RanchRespawnHours` have passed and the zone is fully streamed,
+it calls `RandomizedRanchBase.randomizeRanch(zone, dzone)` on the existing
+zone/dzone (never `checkRanchStory`, which would duplicate the zone) and
+`zone.check()`. An empty ranch that fails to repopulate restarts its countdown
+rather than retrying every tick. Gated by `RanchRespawnEnabled`. Database:
+`ranch(x, y, z, zero_hour)`.
+
+### Patch 6 — vehicle respawn (`patches/vehicles`)
+
+Abandoned/removed vehicles stay gone or accumulate on dedicated servers. This
+patch runs a ticket-based vehicle economy, modelled on the VLCS HDRcade mod:
+removed vehicles earn tickets, and the server spends tickets to spawn
+zone-appropriate vehicles near random online players. State lives in
+`puxadinho_vehicles.db` beside the save. The spawn helpers (`VehicleSpawnSite`,
+`VehicleZoneCache`) live in the same package.
+
+| Class | Method | Injected behavior |
+|-------|--------|-------------------|
 | `zombie.vehicles.VehicleManager` | `serverUpdate` | throttled (1 s) vehicle scan: stamps `last_seen` for vehicles within `VehicleRespawnChunks` of a player, hands vehicles unseen for `VehicleRespawnDays` to the janitor, and periodically spends tickets to spawn new vehicles near a random online player |
 | `zombie.vehicles.BaseVehicle` | `permanentlyRemove` | grants one ticket for every vehicle removal (burnt-wreck removal, admin `/remove`, a future dismantle mod, or the janitor) |
 
@@ -173,9 +222,8 @@ Spawn reuses the vanilla path: `new BaseVehicle(cell)`, `setScriptName`,
 `setScript`, `setZone`, `setVehicleType`, `setDir`, position, `setSquare`,
 `chunk.vehicles.add`, `addToWorld`, `VehiclesDB2.addVehicle`, key and `repair`.
 This gives correct multiplayer sync through the normal `VehicleFullUpdate`
-stream. State is stored in `ranch(x, y, z, zero_hour)`,
-`vehicles(sql_id, script, x, y, z, last_seen)` and `state(key, value)` (tickets,
-last spawn hour, round-robin index).
+stream. State is stored in `vehicles(sql_id, script, x, y, z, last_seen)` and
+`state(key, value)` (tickets, last spawn hour, round-robin index).
 
 Known limits: the game clock pauses on an empty server (`PauseEmpty`), so
 timers only advance while someone is online. B42 has no vanilla way to remove
@@ -183,7 +231,7 @@ an intact normal vehicle, so that source of tickets requires the planned
 client-side dismantle mod (which will call `permanentlyRemove` and therefore
 work through the same hook).
 
-### Patch 5 — safehouse item protection (`patches/safehouse`)
+### Patch 7 — safehouse item protection (`patches/safehouse`)
 
 The sandbox "hours for world item removal" timer culls dropped
 `IsoWorldInventoryObject`s when a square is (re)loaded, inside
@@ -208,40 +256,6 @@ while a safehouse existed **stays protected after the safehouse is deleted** —
 this is intentional. `ItemSpawner` sets the same vanilla bit for loot-respawn
 items, which is why the protection is permanent rather than a separable state.
 Gated by `SafehouseItemProtection` in `Puxadinho.ini`.
-
-### Patch 6 — death notifications (`patches/death`)
-
-Announces every player death to server chat with a message chosen by the cause
-of death. This used to be baked into the stats patch; it is now separate so the
-wording can be configured (or disabled) without touching `puxadinho_stats.db`.
-
-| Class | Method | Injected behavior |
-|-------|--------|-------------------|
-| `zombie.characters.IsoPlayer` | `onKilled` | classifies the cause of death and sends the matching configured message to server chat |
-
-Cause classification is identical to the stats patch: the killer object
-(`IsoPlayer` / `IsoZombie` / animal), then `isOnFire` / `isKilledByFall`, then
-the illness vitals (zombie infection, wound infection, food sickness, poison,
-thirst, hunger, sickness), falling back to `environment`. The resulting key
-(`player`, `zombie`, `animal`, `fire`, `fall`, `infection`, `wound`, `food`,
-`poison`, `thirst`, `hunger`, `sickness`, `environment`) selects the message
-template `DeathMessage<Cause>` from `Puxadinho.ini`.
-
-Each template may use these placeholders:
-
-| Placeholder | Expands to |
-|-------------|-----------|
-| `{player}` | character name, plus username in parentheses when known: `John Doe (steamuser)` |
-| `{name}` | character name only |
-| `{username}` | account username only (empty if unknown) |
-| `{killer}` | `a zombie`, `an animal`, a player's character name, or empty |
-| `{weapon}` | weapon name (empty if none) |
-| `{weapon_suffix}` | `" (Weapon)"` when a weapon was used, otherwise empty |
-| `{survived}` | survival time, e.g. `7 days 18 hours` or `1 month 2 days 3 hours` (a month is 30 days; under an hour reads `less than an hour`) |
-| `{cause}` | the machine cause key |
-
-The message is sent with `ChatServer.sendMessageToServerChat` only on the
-server. Gated by `DeathMessagesEnabled` in `Puxadinho.ini`.
 
 ## Configuration
 
@@ -295,11 +309,15 @@ require a ticket; `VehicleMaxTickets` caps the ledger; `VehicleSpawnFreqDays`
 is how often tickets are spent (`0` = hourly); `VehicleSpawnBatchSize` is the
 number of spawn attempts per tick; `VehicleSpawnMinDistance` and
 `VehicleSpawnMaxDistance` bound the tiles search from the chosen player.
-`StatsEnabled` gates patch 3. `DeathMessagesEnabled` gates patch 6; the
+`StatsEnabled` gates patch 3. `DeathMessagesEnabled` gates patch 4; the
 `DeathMessage<Cause>` values are chat templates using the placeholders listed
 above. The ini is written and read as UTF-8, so non-ASCII message text is safe.
 The death-message defaults are English, but every cause can be reworded (for
 example back into Portuguese) per server.
+
+Ranch and vehicle respawn keep separate databases now: `puxadinho_ranch.db` and
+`puxadinho_vehicles.db`. An upgrade from a build that used the combined
+`puxadinho_world.db` simply starts those two fresh (the old file is ignored).
 
 `DebugLogging` is the master switch for all informational logging from every
 patch. When false the agent is silent except for genuine errors (which always
@@ -404,15 +422,17 @@ java/
         ZombieGuard.java
       ranch/
         RanchAnimalAgePatch.java
+        RanchRespawnPatch.java
+        RanchRespawnGuard.java
       stats/
         PlayerStatsPatch.java
         StatsGuard.java
       death/
         DeathMessagePatch.java
         DeathMessageGuard.java
-      respawn/
-        WorldRespawnPatch.java
-        RespawnGuard.java
+      vehicles/
+        VehicleRespawnPatch.java
+        VehicleRespawnGuard.java
         VehicleSpawnSite.java            # picks a loaded predefined vehicle zone + tile
         VehicleZoneCache.java            # parses/caches IsoMetaGrid.vehiclesZones to a file
       safehouse/

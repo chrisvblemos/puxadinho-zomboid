@@ -1,4 +1,4 @@
-package com.puxadinho.patches.respawn;
+package com.puxadinho.patches.vehicles;
 
 import java.util.ArrayList;
 import java.util.Collections;

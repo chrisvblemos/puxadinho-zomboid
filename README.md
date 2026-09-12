@@ -17,9 +17,10 @@ configuration and install instructions.
 | 1 | **Zombie duplication fix** | Stops the population manager from accumulating duplicate records for the same zombie, which respawned and snowballed into hundreds of identical clones. |
 | 2 | **Ranch animal age fix** | Disables the old-world age gate that guaranteed ranch-spawned animals were created dead once the world passed ~190 in-game days. |
 | 3 | **Player statistics** | Persists a time-series of every survivor's progress (kills, hours survived, position, health, infection, inventory, skills) and every death to SQLite, surviving character death. |
-| 4 | **World respawn** | Refills a ranch's herd once it has been empty for 48 in-game hours, and runs a ticket-based vehicle economy: removed/abandoned vehicles earn tickets, which the server spends to spawn zone-appropriate vehicles near random players. |
-| 5 | **Safehouse item protection** | Stops the sandbox dropped-item cleanup from deleting world items dropped inside a safehouse. |
-| 6 | **Death notifications** | Announces every player death to server chat, with a fully configurable message per cause of death (including character name, username and survival time). |
+| 4 | **Death notifications** | Announces every player death to server chat, with a fully configurable message per cause of death (including character name, username and survival time). |
+| 5 | **Ranch respawn** | Refills a ranch's herd once it has been empty for 48 in-game hours. |
+| 6 | **Vehicle respawn** | Runs a ticket-based vehicle economy: removed/abandoned vehicles earn tickets, which the server spends to spawn zone-appropriate vehicles near random players. |
+| 7 | **Safehouse item protection** | Stops the sandbox dropped-item cleanup from deleting world items dropped inside a safehouse. |
 
 ## Quick start
 

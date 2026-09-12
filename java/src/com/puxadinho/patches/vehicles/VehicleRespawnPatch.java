@@ -1,7 +1,7 @@
-package com.puxadinho.patches.respawn;
+package com.puxadinho.patches.vehicles;
 
-import com.puxadinho.Patch;
 import com.puxadinho.Debug;
+import com.puxadinho.Patch;
 import com.puxadinho.asm.ClassWriters;
 
 import org.objectweb.asm.ClassReader;
@@ -10,16 +10,20 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
-public final class WorldRespawnPatch implements Patch {
-    private static final String DESIGNATION_ZONE = "zombie/iso/areas/DesignationZone";
+/**
+ * Ticket-based vehicle respawn. Hooks the vehicle scan/janitor and every
+ * permanent removal, delegating to {@link VehicleRespawnGuard}. Independent
+ * from the ranch respawn patch.
+ */
+public final class VehicleRespawnPatch implements Patch {
     private static final String VEHICLE_MANAGER = "zombie/vehicles/VehicleManager";
     private static final String BASE_VEHICLE = "zombie/vehicles/BaseVehicle";
-    private static final String GUARD = "com/puxadinho/patches/respawn/RespawnGuard";
+    private static final String GUARD = "com/puxadinho/patches/vehicles/VehicleRespawnGuard";
     private static final String VEHICLE_DESC = "Lzombie/vehicles/BaseVehicle;";
 
     @Override
     public boolean matches(String className) {
-        return DESIGNATION_ZONE.equals(className) || VEHICLE_MANAGER.equals(className) || BASE_VEHICLE.equals(className);
+        return VEHICLE_MANAGER.equals(className) || BASE_VEHICLE.equals(className);
     }
 
     @Override
@@ -30,9 +34,6 @@ public final class WorldRespawnPatch implements Patch {
             @Override
             public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
                 MethodVisitor original = super.visitMethod(access, name, descriptor, signature, exceptions);
-                if (DESIGNATION_ZONE.equals(className) && name.equals("update") && descriptor.equals("()V")) {
-                    return tick(original, "tickZones");
-                }
                 if (VEHICLE_MANAGER.equals(className) && name.equals("serverUpdate") && descriptor.equals("()V")) {
                     return tick(original, "tickVehicles");
                 }
@@ -43,7 +44,7 @@ public final class WorldRespawnPatch implements Patch {
             }
         };
         reader.accept(visitor, 0);
-        Debug.log("respawn patch applied to " + className);
+        Debug.log("vehicle respawn patch applied to " + className);
         return writer.toByteArray();
     }
 

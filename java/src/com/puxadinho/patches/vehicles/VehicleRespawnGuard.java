@@ -1,4 +1,4 @@
-package com.puxadinho.patches.respawn;
+package com.puxadinho.patches.vehicles;
 
 import java.io.File;
 import java.sql.Connection;
@@ -18,116 +18,30 @@ import zombie.characters.IsoPlayer;
 import zombie.core.random.Rand;
 import zombie.iso.IsoChunk;
 import zombie.iso.IsoGridSquare;
-import zombie.iso.IsoMetaChunk;
 import zombie.iso.IsoWorld;
-import zombie.iso.areas.DesignationZoneAnimal;
-import zombie.iso.zones.Zone;
 import zombie.network.GameServer;
 import zombie.network.ServerMap;
-import zombie.randomizedWorld.randomizedRanch.RandomizedRanchBase;
 import zombie.vehicles.BaseVehicle;
 import zombie.vehicles.VehicleManager;
 import zombie.vehicles.VehiclesDB2;
 
-public final class RespawnGuard {
-    private static final HashMap<ZoneKey, Zone> RANCH_ZONES = new HashMap<>();
-    private static final HashMap<ZoneKey, Double> RANCH_ZERO = new HashMap<>();
+/**
+ * Ticket-based vehicle economy: removed/abandoned vehicles earn tickets, which
+ * the server spends to spawn zone-appropriate vehicles near random players.
+ * State lives in its own SQLite database, {@code puxadinho_vehicles.db}, beside
+ * the save.
+ */
+public final class VehicleRespawnGuard {
     private static final HashMap<Integer, VehicleRecord> VEHICLES = new HashMap<>();
     private static Connection conn;
     private static boolean loaded;
-    private static long lastZoneTick;
     private static long lastVehicleTick;
     private static int tickets;
     private static double lastSpawnHours;
     private static int roundRobinIndex;
     private static long lastScheduleLogHour = Long.MIN_VALUE;
 
-    private RespawnGuard() {
-    }
-
-    public static void tickZones() {
-        if (!GameServer.server) {
-            return;
-        }
-        Config.load();
-        if (!Config.ranchRespawnEnabled) {
-            return;
-        }
-        long nowMs = System.currentTimeMillis();
-        if (nowMs - lastZoneTick < 2500L) {
-            return;
-        }
-        lastZoneTick = nowMs;
-        open();
-        double now = GameTime.getInstance().getWorldAgeHours();
-        for (DesignationZoneAnimal zone : DesignationZoneAnimal.getAllZones()) {
-            if (!"AnimalZone".equals(zone.type)) {
-                continue;
-            }
-            Zone mapZone = findRanchZone(zone);
-            if (mapZone == null) {
-                continue;
-            }
-            ZoneKey key = new ZoneKey(zone.x, zone.y, zone.z);
-            if (!zone.getAnimalsConnected().isEmpty()) {
-                if (RANCH_ZERO.remove(key) != null) {
-                    deleteRanch(key);
-                }
-                continue;
-            }
-            Double zero = RANCH_ZERO.get(key);
-            if (zero == null) {
-                RANCH_ZERO.put(key, now);
-                putRanch(key, now);
-                Debug.logGameplay("ranch " + key.x() + "," + key.y() + " emptied; respawn after " + (int)Config.ranchRespawnHours + "h");
-                continue;
-            }
-            if (now - zero < Config.ranchRespawnHours) {
-                continue;
-            }
-            if (!zone.isFullyStreamed()) {
-                continue;
-            }
-            try {
-                RandomizedRanchBase.randomizeRanch(mapZone, zone);
-                zone.check();
-            } catch (Throwable t) {
-                Debug.error("ranch respawn failed: " + t);
-            }
-            if (!zone.getAnimalsConnected().isEmpty()) {
-                Debug.logGameplay("ranch " + key.x() + "," + key.y() + " respawned " + zone.getAnimalsConnected().size() + " animals");
-                RANCH_ZERO.remove(key);
-                deleteRanch(key);
-            } else {
-                RANCH_ZERO.put(key, now);
-                putRanch(key, now);
-            }
-        }
-    }
-
-    private static Zone findRanchZone(DesignationZoneAnimal dzone) {
-        ZoneKey key = new ZoneKey(dzone.x, dzone.y, dzone.z);
-        Zone zone = RANCH_ZONES.get(key);
-        if (zone != null) {
-            return zone;
-        }
-        IsoMetaChunk chunk = IsoWorld.instance.metaGrid.getChunkDataFromTile(dzone.x, dzone.y);
-        if (chunk != null) {
-            for (int i = 0; i < chunk.getZonesSize(); i++) {
-                Zone candidate = chunk.getZone(i);
-                if (candidate != null
-                    && "Ranch".equals(candidate.getType())
-                    && dzone.x >= candidate.x
-                    && dzone.x < candidate.x + candidate.getWidth()
-                    && dzone.y >= candidate.y
-                    && dzone.y < candidate.y + candidate.getHeight()
-                    && candidate.z == dzone.z) {
-                    RANCH_ZONES.put(key, candidate);
-                    return candidate;
-                }
-            }
-        }
-        return null;
+    private VehicleRespawnGuard() {
     }
 
     public static void tickVehicles() {
@@ -397,17 +311,11 @@ public final class RespawnGuard {
             Class.forName("org.sqlite.JDBC");
             String dir = ZomboidFileSystem.instance.getCurrentSaveDir();
             new File(dir).mkdirs();
-            String path = dir + File.separator + "puxadinho_world.db";
+            String path = dir + File.separator + "puxadinho_vehicles.db";
             conn = DriverManager.getConnection("jdbc:sqlite:" + path);
             try (Statement stat = conn.createStatement()) {
-                stat.executeUpdate("CREATE TABLE IF NOT EXISTS ranch (x INTEGER, y INTEGER, z INTEGER, zero_hour REAL, PRIMARY KEY (x, y, z))");
                 stat.executeUpdate("CREATE TABLE IF NOT EXISTS vehicles (sql_id INTEGER PRIMARY KEY, script TEXT, x REAL, y REAL, z REAL, last_seen REAL)");
                 stat.executeUpdate("CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value REAL)");
-            }
-            try (Statement stat = conn.createStatement(); ResultSet rs = stat.executeQuery("SELECT x, y, z, zero_hour FROM ranch")) {
-                while (rs.next()) {
-                    RANCH_ZERO.put(new ZoneKey(rs.getInt(1), rs.getInt(2), rs.getInt(3)), rs.getDouble(4));
-                }
             }
             try (Statement stat = conn.createStatement(); ResultSet rs = stat.executeQuery("SELECT sql_id, script, x, y, z, last_seen FROM vehicles")) {
                 while (rs.next()) {
@@ -417,19 +325,11 @@ public final class RespawnGuard {
             tickets = (int)getState("tickets", 0);
             lastSpawnHours = getState("last_spawn_hours", 0);
             roundRobinIndex = (int)getState("round_robin", 0);
-            Debug.logGameplay("world respawn state: " + path + " (tickets=" + tickets + ")");
+            Debug.logGameplay("vehicle respawn state: " + path + " (tickets=" + tickets + ")");
         } catch (Throwable t) {
-            Debug.error("world respawn database unavailable: " + t);
+            Debug.error("vehicle respawn database unavailable: " + t);
             conn = null;
         }
-    }
-
-    private static void putRanch(ZoneKey key, double zero) {
-        exec("INSERT OR REPLACE INTO ranch (x, y, z, zero_hour) VALUES (" + key.x() + ", " + key.y() + ", " + key.z() + ", " + zero + ")");
-    }
-
-    private static void deleteRanch(ZoneKey key) {
-        exec("DELETE FROM ranch WHERE x = " + key.x() + " AND y = " + key.y() + " AND z = " + key.z());
     }
 
     private static void putVehicle(int id, VehicleRecord record) {
@@ -465,7 +365,7 @@ public final class RespawnGuard {
                 }
             }
         } catch (Throwable t) {
-            Debug.error("world respawn state read failed: " + t);
+            Debug.error("vehicle respawn state read failed: " + t);
         }
         return fallback;
     }
@@ -479,7 +379,7 @@ public final class RespawnGuard {
             ps.setDouble(2, value);
             ps.executeUpdate();
         } catch (Throwable t) {
-            Debug.error("world respawn state write failed: " + t);
+            Debug.error("vehicle respawn state write failed: " + t);
         }
     }
 
@@ -490,11 +390,8 @@ public final class RespawnGuard {
         try (Statement stat = conn.createStatement()) {
             stat.executeUpdate(sql);
         } catch (Throwable t) {
-            Debug.error("world respawn write failed: " + t);
+            Debug.error("vehicle respawn write failed: " + t);
         }
-    }
-
-    private record ZoneKey(int x, int y, int z) {
     }
 
     private static final class VehicleRecord {
