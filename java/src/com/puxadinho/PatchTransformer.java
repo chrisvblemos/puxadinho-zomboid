@@ -13,6 +13,7 @@ public final class PatchTransformer implements ClassFileTransformer {
         new com.puxadinho.patches.death.DeathMessagePatch(),
         new com.puxadinho.patches.ranch.RanchRespawnPatch(),
         new com.puxadinho.patches.vehicles.VehicleRespawnPatch(),
+        new com.puxadinho.patches.perf.PerfPatch(),
         new com.puxadinho.patches.safehouse.SafehouseItemPatch()
     );
 

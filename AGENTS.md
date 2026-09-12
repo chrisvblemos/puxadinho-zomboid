@@ -24,6 +24,10 @@ Current patches:
    random online players.
 7. **Safehouse item protection** — stops the sandbox dropped-item removal timer
    from deleting world items whose square is inside a safehouse.
+8. **Server performance tracking** — samples JVM health (heap, GC, CPU, threads)
+   alongside game state (online players, loaded zombies/animals/vehicles, world
+   age) into a SQLite database so resource use can be correlated with server
+   activity.
 
 ## Architecture
 
@@ -257,6 +261,32 @@ this is intentional. `ItemSpawner` sets the same vanilla bit for loot-respawn
 items, which is why the protection is permanent rather than a separable state.
 Gated by `SafehouseItemProtection` in `Puxadinho.ini`.
 
+### Patch 8 — server performance tracking (`patches/perf`)
+
+There is no server-side way to see how JVM resource use lines up with what the
+game was doing. This patch samples both every `PerfSampleSeconds` (default 60,
+wall clock) and appends them to `puxadinho_perf.db` beside the save.
+
+| Class | Method | Injected behavior |
+|-------|--------|-------------------|
+| `zombie.network.ServerMap` | `preupdate` | throttled (1 sample per `PerfSampleSeconds`) capture of JVM and game state |
+
+`ServerMap.preupdate` is the server's per-tick world update, so the sample is
+taken on the server thread (the only safe place to read `IsoWorld`/`GameTime`).
+The guard throttles itself and hands a plain record to a daemon writer thread
+that batches inserts, mirroring the stats patch. JVM values come from
+`java.lang.management` and `com.sun.management.OperatingSystemMXBean`; GC count
+and time are stored both cumulatively and as deltas since the previous sample.
+The game values are the online player count (`GameServer.getPlayers()` filtered
+to non-animal survivors; unlike `getPlayerCount()` this does not skip roles with
+`HideFromSteamUserList`, such as admin),
+loaded zombies/animals/vehicles from the current cell and the world age in
+hours. Gated by `PerfStatsEnabled`. Schema (`perf_samples`): `ts`, `epoch_ms`,
+`uptime_ms`, `heap_used`, `heap_committed`, `heap_max`, `nonheap_used`,
+`gc_count`, `gc_time_ms`, `gc_count_delta`, `gc_time_delta_ms`,
+`process_cpu_load`, `system_cpu_load`, `thread_count`, `peak_thread_count`,
+`loaded_classes`, `players`, `zombies`, `animals`, `vehicles`, `world_age_hours`.
+
 ## Configuration
 
 On first use the agent writes `Puxadinho.ini` to the Zomboid cache
@@ -279,6 +309,9 @@ VehicleSpawnMinDistance = 55
 VehicleSpawnMaxDistance = 250
 
 StatsEnabled = true
+
+PerfStatsEnabled = true
+PerfSampleSeconds = 60
 
 DeathMessagesEnabled = true
 DeathMessagePlayer = {player} was killed by {killer}{weapon_suffix} - survived {survived}. F
@@ -309,7 +342,9 @@ require a ticket; `VehicleMaxTickets` caps the ledger; `VehicleSpawnFreqDays`
 is how often tickets are spent (`0` = hourly); `VehicleSpawnBatchSize` is the
 number of spawn attempts per tick; `VehicleSpawnMinDistance` and
 `VehicleSpawnMaxDistance` bound the tiles search from the chosen player.
-`StatsEnabled` gates patch 3. `DeathMessagesEnabled` gates patch 4; the
+`StatsEnabled` gates patch 3. `PerfStatsEnabled` gates patch 8 and
+`PerfSampleSeconds` is the wall-clock seconds between samples.
+`DeathMessagesEnabled` gates patch 4; the
 `DeathMessage<Cause>` values are chat templates using the placeholders listed
 above. The ini is written and read as UTF-8, so non-ASCII message text is safe.
 The death-message defaults are English, but every cause can be reworded (for
@@ -435,6 +470,9 @@ java/
         VehicleRespawnGuard.java
         VehicleSpawnSite.java            # picks a loaded predefined vehicle zone + tile
         VehicleZoneCache.java            # parses/caches IsoMetaGrid.vehiclesZones to a file
+      perf/
+        PerfPatch.java
+        PerfGuard.java                   # samples JVM + game state into puxadinho_perf.db
       safehouse/
         SafehouseItemPatch.java
         SafehouseGuard.java

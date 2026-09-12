@@ -24,6 +24,8 @@ public final class Config {
     public static boolean safehouseItemProtection = true;
     public static int safehouseProtectionMargin = 0;
     public static boolean statsEnabled = true;
+    public static boolean perfStatsEnabled = true;
+    public static int perfSampleSeconds = 60;
     public static boolean deathMessagesEnabled = true;
     public static String deathMessagePlayer = "{player} was killed by {killer}{weapon_suffix} - survived {survived}. F";
     public static String deathMessageZombie = "{player} was killed by {killer} - survived {survived}. F";
@@ -113,6 +115,22 @@ public final class Config {
         #   true  = record kills, hours survived, logins, inventory, deaths, etc.
         #   false = no stat tracking and no database writes.
         StatsEnabled = true
+
+        # ------------------------------ Performance --------------------------------
+
+        # Master switch for the server performance database (puxadinho_perf.db).
+        # Samples JVM health (heap use, GC count/time, CPU load, thread count)
+        # alongside game state (online players, loaded zombies/animals/vehicles,
+        # world age) so resource use can be correlated with what the server was
+        # doing.
+        #   true  = record a performance sample every PerfSampleSeconds.
+        #   false = no performance sampling and no database writes.
+        PerfStatsEnabled = true
+
+        # Wall-clock seconds between performance samples. Smaller is finer-grained
+        # but writes more rows.
+        #   60 = one sample per minute.
+        PerfSampleSeconds = 60
 
         # ---------------------------- Death messages -------------------------------
 
@@ -229,6 +247,8 @@ public final class Config {
         safehouseItemProtection = bool(properties, "SafehouseItemProtection", safehouseItemProtection);
         safehouseProtectionMargin = (int)number(properties, "SafehouseProtectionMargin", safehouseProtectionMargin);
         statsEnabled = bool(properties, "StatsEnabled", statsEnabled);
+        perfStatsEnabled = bool(properties, "PerfStatsEnabled", perfStatsEnabled);
+        perfSampleSeconds = (int)number(properties, "PerfSampleSeconds", perfSampleSeconds);
         deathMessagesEnabled = bool(properties, "DeathMessagesEnabled", deathMessagesEnabled);
         deathMessagePlayer = string(properties, "DeathMessagePlayer", deathMessagePlayer);
         deathMessageZombie = string(properties, "DeathMessageZombie", deathMessageZombie);
