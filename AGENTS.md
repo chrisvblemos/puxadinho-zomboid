@@ -208,12 +208,24 @@ server currently has loaded are accepted, so spawns always land in loaded
 territory.
 Spawn reuses the vanilla path: `new BaseVehicle(cell)`, `setScriptName`,
 `setScript`, `setZone`, `setVehicleType`, `setDir`, position, `setSquare`,
-`chunk.vehicles.add`, `addToWorld`, `VehiclesDB2.addVehicle`, key and `repair`.
-Because `repair` leaves every part pristine, the part condition is then set from
-the sandbox `CarGeneralCondition` option (1 very low = 0-25, 2 low = 20-50,
-3 normal = 60-100, 4 high = 75-100, 5 very high = 90-100), so respawned
-vehicles match the server's setting instead of always spawning at full
-condition. This gives correct multiplayer sync through the normal
+`chunk.vehicles.add`, `addToWorld`, `VehiclesDB2.addVehicle` and `repair`.
+Because `setX/setY/setZ` do not touch `jniTransform.origin` (which
+`getWorldPos`/`isIntersectingSquare` read), the origin is set from the spawn
+position right after positioning, as vanilla `IsoChunk.AddVehicles_OnZone`
+does; without it the collision and occupied-tile checks all see the new vehicle
+at (0,0,0) and vehicles stack. `repair` then leaves every part pristine, so the
+vehicle is finished off from the sandbox:
+
+- Part condition from `CarGeneralCondition` (1 very low = 0-25, 2 low = 20-50,
+  3 normal = 60-100, 4 high = 75-100, 5 very high = 90-100).
+- Fuel from `ChanceHasGas` (20/45/95%) and `InitialGas`, using the vanilla
+  `Vehicles.Create.GasTank` range logic.
+- Battery charge set to the rolled part condition, so it is not always 100%.
+
+Keys are left to the engine: the spawn no longer forces a key into the ignition,
+so `addToWorld` -> `trySpawnKey` -> `addKeyToWorld` randomly places the key in
+the ignition, the glove box or on the ground (scaled by the `keyLootNew` sandbox
+option). This gives correct multiplayer sync through the normal
 `VehicleFullUpdate` stream. State is stored in
 `vehicles(sql_id, script, x, y, z, last_seen)` and `state(key, value)` (tickets,
 last spawn hour, round-robin index).
