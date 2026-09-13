@@ -11,9 +11,9 @@ import zombie.ZomboidFileSystem;
 
 public final class Config {
     public static boolean ranchRespawnEnabled = true;
-    public static double ranchRespawnHours = 48.0;
+    public static double ranchRespawnHours = 168.0;
     public static boolean vehicleRespawnEnabled = true;
-    public static double vehicleRespawnDays = 7.0;
+    public static double vehicleRespawnDays = 224.0;
     public static int vehicleRespawnChunks = 2;
     public static boolean vehicleTicketSystem = true;
     public static int vehicleMaxTickets = 30;
@@ -27,19 +27,19 @@ public final class Config {
     public static boolean perfStatsEnabled = true;
     public static int perfSampleSeconds = 60;
     public static boolean deathMessagesEnabled = true;
-    public static String deathMessagePlayer = "{player} was killed by {killer}{weapon_suffix} - survived {survived}. F";
-    public static String deathMessageZombie = "{player} was killed by {killer} - survived {survived}. F";
-    public static String deathMessageAnimal = "{player} was killed by {killer} - survived {survived}. F";
-    public static String deathMessageFire = "{player} burned to death - survived {survived}. F";
-    public static String deathMessageFall = "{player} died in a fall - survived {survived}. F";
-    public static String deathMessageInfection = "{player} turned after being infected - survived {survived}. F";
-    public static String deathMessageWound = "{player} died of wound infection - survived {survived}. F";
-    public static String deathMessageFood = "{player} died of food poisoning - survived {survived}. F";
-    public static String deathMessagePoison = "{player} died of poison - survived {survived}. F";
-    public static String deathMessageThirst = "{player} died of thirst - survived {survived}. F";
-    public static String deathMessageHunger = "{player} died of hunger - survived {survived}. F";
-    public static String deathMessageSickness = "{player} died of sickness - survived {survived}. F";
-    public static String deathMessageEnvironment = "{player} died - survived {survived}. F";
+    public static String deathMessagePlayer = "{player} foi morto por {killer} | {weapon_suffix} | {survived}";
+    public static String deathMessageZombie = "{player} foi morto por {killer} | {survived}";
+    public static String deathMessageAnimal = "{player} foi morto por {killer} | {survived}";
+    public static String deathMessageFire = "{player} morreu queimado | {survived}";
+    public static String deathMessageFall = "{player} foi morto pela gravidade | {survived}";
+    public static String deathMessageInfection = "{player} virou zumbi | {survived}";
+    public static String deathMessageWound = "{player} morreu de infeccao | {survived}";
+    public static String deathMessageFood = "{player} morreu de intoxicacao alimentar | {survived}";
+    public static String deathMessagePoison = "{player} morreu envenenado | {survived}";
+    public static String deathMessageThirst = "{player} morreu de sede | {survived}";
+    public static String deathMessageHunger = "{player} morreu de fome | {survived}";
+    public static String deathMessageSickness = "{player} morreu de doenca | {survived}";
+    public static String deathMessageEnvironment = "{player} morreu | {survived}";
     public static boolean debugLogging = false;
 
     private static final String DEFAULTS = """
@@ -59,7 +59,7 @@ public final class Config {
         # How many in-game hours a ranch must have zero live animals before its
         # herd is respawned. Lower means animals come back sooner.
         #   48 = two in-game days.
-        RanchRespawnHours = 48
+        RanchRespawnHours = 168
 
         # ------------------------------- Vehicles ----------------------------------
         #
@@ -77,7 +77,7 @@ public final class Config {
         # How many in-game days a vehicle must have no player nearby before the
         # janitor removes it (the removal then grants a ticket).
         #   7 = one in-game week.
-        VehicleRespawnDays = 7
+        VehicleRespawnDays = 224
 
         # Radius, in chunks, that counts as a player being "near" a vehicle. A
         # vehicle within this range is considered in use and is not aged out.
@@ -167,19 +167,19 @@ public final class Config {
         #   false = no death announcements (statistics are unaffected).
         DeathMessagesEnabled = true
 
-        DeathMessagePlayer = {player} was killed by {killer}{weapon_suffix} - survived {survived}. F
-        DeathMessageZombie = {player} was killed by {killer} - survived {survived}. F
-        DeathMessageAnimal = {player} was killed by {killer} - survived {survived}. F
-        DeathMessageFire = {player} burned to death - survived {survived}. F
-        DeathMessageFall = {player} died in a fall - survived {survived}. F
-        DeathMessageInfection = {player} turned after being infected - survived {survived}. F
-        DeathMessageWound = {player} died of wound infection - survived {survived}. F
-        DeathMessageFood = {player} died of food poisoning - survived {survived}. F
-        DeathMessagePoison = {player} died of poison - survived {survived}. F
-        DeathMessageThirst = {player} died of thirst - survived {survived}. F
-        DeathMessageHunger = {player} died of hunger - survived {survived}. F
-        DeathMessageSickness = {player} died of sickness - survived {survived}. F
-        DeathMessageEnvironment = {player} died - survived {survived}. F
+        DeathMessagePlayer = {player} foi morto por {killer} | {weapon_suffix} | {survived}
+        DeathMessageZombie = {player} foi morto por {killer} | {survived}
+        DeathMessageAnimal = {player} foi morto por {killer} | {survived}
+        DeathMessageFire = {player} morreu queimado | {survived}
+        DeathMessageFall = {player} foi morto pela gravidade | {survived}
+        DeathMessageInfection = {player} virou zumbi | {survived}
+        DeathMessageWound = {player} morreu de infeccao | {survived}
+        DeathMessageFood = {player} morreu de intoxicacao alimentar | {survived}
+        DeathMessagePoison = {player} morreu envenenado | {survived}
+        DeathMessageThirst = {player} morreu de sede | {survived}
+        DeathMessageHunger = {player} morreu de fome | {survived}
+        DeathMessageSickness = {player} morreu de doenca | {survived}
+        DeathMessageEnvironment = {player} morreu | {survived}
 
         # ---------------------------- Safehouse items ------------------------------
 

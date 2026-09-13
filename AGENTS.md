@@ -15,7 +15,7 @@ Current patches:
 3. **Death notifications** — announces every player death to server chat with a
    message chosen by the cause of death, fully configurable per cause.
 4. **Ranch respawn** — refills a ranch's animals once its herd has been wiped
-   out for `RanchRespawnHours` (default 48) in-game hours.
+   out for `RanchRespawnHours` (default 168) in-game hours.
 5. **Vehicle respawn** — a ticket-based economy: removed/abandoned vehicles earn
    tickets, which the server spends to spawn zone-appropriate vehicles near
    random online players.
@@ -148,7 +148,7 @@ server. Gated by `DeathMessagesEnabled` in `Puxadinho.ini`.
 
 Dedicated servers never refill a wiped ranch, so it stays empty forever. This
 patch watches animal zones and re-runs the vanilla ranch randomization once a
-herd has been missing for `RanchRespawnHours` (default 48 in-game hours). State
+herd has been missing for `RanchRespawnHours` (default 168 in-game hours). State
 lives in `puxadinho_ranch.db` beside the save.
 
 | Class | Method | Injected behavior |
@@ -280,10 +280,10 @@ regenerate the defaults.
 
 ```ini
 RanchRespawnEnabled = true
-RanchRespawnHours = 48
+RanchRespawnHours = 168
 
 VehicleRespawnEnabled = true
-VehicleRespawnDays = 7
+VehicleRespawnDays = 224
 VehicleRespawnChunks = 2
 VehicleTicketSystem = true
 VehicleMaxTickets = 30
@@ -298,19 +298,19 @@ PerfStatsEnabled = true
 PerfSampleSeconds = 60
 
 DeathMessagesEnabled = true
-DeathMessagePlayer = {player} was killed by {killer}{weapon_suffix} - survived {survived}. F
-DeathMessageZombie = {player} was killed by {killer} - survived {survived}. F
-DeathMessageAnimal = {player} was killed by {killer} - survived {survived}. F
-DeathMessageFire = {player} burned to death - survived {survived}. F
-DeathMessageFall = {player} died in a fall - survived {survived}. F
-DeathMessageInfection = {player} turned after being infected - survived {survived}. F
-DeathMessageWound = {player} died of wound infection - survived {survived}. F
-DeathMessageFood = {player} died of food poisoning - survived {survived}. F
-DeathMessagePoison = {player} died of poison - survived {survived}. F
-DeathMessageThirst = {player} died of thirst - survived {survived}. F
-DeathMessageHunger = {player} died of hunger - survived {survived}. F
-DeathMessageSickness = {player} died of sickness - survived {survived}. F
-DeathMessageEnvironment = {player} died - survived {survived}. F
+DeathMessagePlayer = {player} foi morto por {killer} | {weapon_suffix} | {survived}
+DeathMessageZombie = {player} foi morto por {killer} | {survived}
+DeathMessageAnimal = {player} foi morto por {killer} | {survived}
+DeathMessageFire = {player} morreu queimado | {survived}
+DeathMessageFall = {player} foi morto pela gravidade | {survived}
+DeathMessageInfection = {player} virou zumbi | {survived}
+DeathMessageWound = {player} morreu de infeccao | {survived}
+DeathMessageFood = {player} morreu de intoxicacao alimentar | {survived}
+DeathMessagePoison = {player} morreu envenenado | {survived}
+DeathMessageThirst = {player} morreu de sede | {survived}
+DeathMessageHunger = {player} morreu de fome | {survived}
+DeathMessageSickness = {player} morreu de doenca | {survived}
+DeathMessageEnvironment = {player} morreu | {survived}
 
 SafehouseItemProtection = true
 
@@ -331,8 +331,8 @@ number of spawn attempts per tick; `VehicleSpawnMinDistance` and
 `DeathMessagesEnabled` gates patch 3; the
 `DeathMessage<Cause>` values are chat templates using the placeholders listed
 above. The ini is written and read as UTF-8, so non-ASCII message text is safe.
-The death-message defaults are English, but every cause can be reworded (for
-example back into Portuguese) per server.
+The death-message defaults are Portuguese, but every cause can be reworded
+(for example into English) per server.
 
 Ranch and vehicle respawn keep separate databases now: `puxadinho_ranch.db` and
 `puxadinho_vehicles.db`. An upgrade from a build that used the combined
