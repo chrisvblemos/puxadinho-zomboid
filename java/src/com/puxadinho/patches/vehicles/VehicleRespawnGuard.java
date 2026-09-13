@@ -13,9 +13,12 @@ import com.puxadinho.Config;
 import com.puxadinho.Debug;
 
 import zombie.GameTime;
+import zombie.SandboxOptions;
 import zombie.ZomboidFileSystem;
 import zombie.characters.IsoPlayer;
+import zombie.core.physics.WorldSimulation;
 import zombie.core.random.Rand;
+import zombie.inventory.InventoryItem;
 import zombie.iso.IsoChunk;
 import zombie.iso.IsoGridSquare;
 import zombie.iso.IsoWorld;
@@ -23,6 +26,7 @@ import zombie.network.GameServer;
 import zombie.network.ServerMap;
 import zombie.vehicles.BaseVehicle;
 import zombie.vehicles.VehicleManager;
+import zombie.vehicles.VehiclePart;
 import zombie.vehicles.VehiclesDB2;
 
 /**
@@ -227,6 +231,10 @@ public final class VehicleRespawnGuard {
             vehicle.setX(site.x);
             vehicle.setY(site.y);
             vehicle.setZ(site.z);
+            vehicle.jniTransform.origin.set(
+                vehicle.getX() - WorldSimulation.instance.offsetX,
+                vehicle.getZ(),
+                vehicle.getY() - WorldSimulation.instance.offsetY);
             if (overlapsNearbyVehicle(vehicle, site)) {
                 Debug.logGameplay("vehicle spawn: skipped " + site.script + " at " + site.x + "," + site.y
                     + " (overlaps an existing vehicle)");
@@ -240,8 +248,10 @@ public final class VehicleRespawnGuard {
             vehicle.chunk = square.chunk;
             vehicle.addToWorld();
             VehiclesDB2.instance.addVehicle(vehicle);
-            vehicle.setCurrentKey(vehicle.createVehicleKey());
             vehicle.repair();
+            applySandboxCondition(vehicle);
+            applySandboxFuel(vehicle);
+            applyBatteryCharge(vehicle);
             applyVanillaCondition(vehicle, site.baseQuality);
             return true;
         } catch (Throwable t) {
@@ -278,9 +288,99 @@ public final class VehicleRespawnGuard {
     }
 
     /**
+     * Sets every part's condition from the sandbox {@code CarGeneralCondition}
+     * option: 1 very low, 2 low, 3 normal, 4 high, 5 very high. The blanket
+     * {@code repair()} above leaves parts pristine, so this is what makes a
+     * respawned vehicle honour the server's condition setting.
+     */
+    private static void applySandboxCondition(BaseVehicle vehicle) {
+        int min;
+        int max;
+        switch (SandboxOptions.instance.carGeneralCondition.getValue()) {
+            case 1 -> { min = 0; max = 25; }
+            case 2 -> { min = 20; max = 50; }
+            case 4 -> { min = 75; max = 100; }
+            case 5 -> { min = 90; max = 100; }
+            default -> { min = 60; max = 100; }
+        }
+        int count = vehicle.getPartCount();
+        for (int i = 0; i < count; i++) {
+            vehicle.getPartByIndex(i).setCondition(Rand.NextInclusive(min, max));
+        }
+    }
+
+    /**
+     * Fills the gas tank with the sandbox {@code ChanceHasGas} /
+     * {@code InitialGas} logic from {@code Vehicles.Create.GasTank}: first roll
+     * whether the car has any fuel, then pick an amount within the range the
+     * {@code InitialGas} option dictates. {@code repair()} fills the tank to
+     * capacity, so this is what makes a respawned vehicle honour the setting.
+     */
+    private static void applySandboxFuel(BaseVehicle vehicle) {
+        VehiclePart tank = vehicle.getPartById("GasTank");
+        if (tank == null) {
+            return;
+        }
+        int capacity = tank.getContainerCapacity();
+        if (capacity <= 0) {
+            return;
+        }
+        int initialChance = 45;
+        int chanceHasGas = SandboxOptions.instance.chanceHasGas.getValue();
+        if (chanceHasGas == 1) {
+            initialChance = 20;
+        } else if (chanceHasGas == 3) {
+            initialChance = 95;
+        }
+        int gas = 0;
+        if (Rand.Next(100) <= initialChance) {
+            int minGas = Rand.Next(3, capacity / 3);
+            int maxGas = Rand.Next(capacity / 3, capacity / 2);
+            switch (SandboxOptions.instance.initialGas.getValue()) {
+                case 1 -> {
+                    minGas = 1;
+                    maxGas = Rand.Next(2, capacity / 5);
+                }
+                case 2 -> {
+                    minGas = 1;
+                    maxGas = Rand.Next(4, capacity / 4);
+                }
+                case 4 -> {
+                    minGas = Rand.Next(5, capacity / 2);
+                    maxGas = Rand.Next(capacity / 2, capacity);
+                }
+                case 5 -> {
+                    minGas = Rand.Next(8, capacity / 2);
+                    maxGas = capacity;
+                }
+                default -> {
+                }
+            }
+            gas = Rand.Next(minGas, maxGas);
+        }
+        tank.setContainerContentAmount(gas);
+    }
+
+    /**
+     * Sets the battery's charge to its rolled part condition, so a respawned
+     * car's battery is as depleted as its condition instead of always reading
+     * 100% charge.
+     */
+    private static void applyBatteryCharge(BaseVehicle vehicle) {
+        VehiclePart battery = vehicle.getPartById("Battery");
+        if (battery == null) {
+            return;
+        }
+        InventoryItem item = battery.getInventoryItem();
+        if (item != null) {
+            item.setCurrentUsesFloat(battery.getCondition() / 100.0F);
+        }
+    }
+
+    /**
      * Mirrors the vanilla world-gen rust roll based on the zone's
-     * {@code baseVehicleQuality}. Parts are left at full condition, matching
-     * vanilla world-gen (which does not randomize part condition here).
+     * {@code baseVehicleQuality}. Part condition is handled separately by
+     * {@link #applySandboxCondition(BaseVehicle)}.
      */
     private static void applyVanillaCondition(BaseVehicle vehicle, float baseQuality) {
         float quality = Math.min(100.0F, baseQuality * 120.0F);

@@ -209,9 +209,14 @@ territory.
 Spawn reuses the vanilla path: `new BaseVehicle(cell)`, `setScriptName`,
 `setScript`, `setZone`, `setVehicleType`, `setDir`, position, `setSquare`,
 `chunk.vehicles.add`, `addToWorld`, `VehiclesDB2.addVehicle`, key and `repair`.
-This gives correct multiplayer sync through the normal `VehicleFullUpdate`
-stream. State is stored in `vehicles(sql_id, script, x, y, z, last_seen)` and
-`state(key, value)` (tickets, last spawn hour, round-robin index).
+Because `repair` leaves every part pristine, the part condition is then set from
+the sandbox `CarGeneralCondition` option (1 very low = 0-25, 2 low = 20-50,
+3 normal = 60-100, 4 high = 75-100, 5 very high = 90-100), so respawned
+vehicles match the server's setting instead of always spawning at full
+condition. This gives correct multiplayer sync through the normal
+`VehicleFullUpdate` stream. State is stored in
+`vehicles(sql_id, script, x, y, z, last_seen)` and `state(key, value)` (tickets,
+last spawn hour, round-robin index).
 
 Known limits: the game clock pauses on an empty server (`PauseEmpty`), so
 timers only advance while someone is online. B42 has no vanilla way to remove
