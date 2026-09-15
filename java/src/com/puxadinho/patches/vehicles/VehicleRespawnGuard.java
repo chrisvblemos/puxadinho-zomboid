@@ -288,25 +288,16 @@ public final class VehicleRespawnGuard {
     }
 
     /**
-     * Sets every part's condition from the sandbox {@code CarGeneralCondition}
-     * option: 1 very low, 2 low, 3 normal, 4 high, 5 very high. The blanket
+     * Rolls every part's condition through the vanilla
+     * {@code BaseVehicle.setGeneralPartCondition} path, the same method the
+     * randomized-world vehicle stories use. It applies the sandbox
+     * {@code CarGeneralCondition} multiplier (1 very low ... 5 very high) to a
+     * 100-condition base with the default damage roll. The blanket
      * {@code repair()} above leaves parts pristine, so this is what makes a
      * respawned vehicle honour the server's condition setting.
      */
     private static void applySandboxCondition(BaseVehicle vehicle) {
-        int min;
-        int max;
-        switch (SandboxOptions.instance.carGeneralCondition.getValue()) {
-            case 1 -> { min = 0; max = 25; }
-            case 2 -> { min = 20; max = 50; }
-            case 4 -> { min = 75; max = 100; }
-            case 5 -> { min = 90; max = 100; }
-            default -> { min = 60; max = 100; }
-        }
-        int count = vehicle.getPartCount();
-        for (int i = 0; i < count; i++) {
-            vehicle.getPartByIndex(i).setCondition(Rand.NextInclusive(min, max));
-        }
+        vehicle.setGeneralPartCondition(1.0F, 0.0F);
     }
 
     /**

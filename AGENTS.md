@@ -216,8 +216,10 @@ does; without it the collision and occupied-tile checks all see the new vehicle
 at (0,0,0) and vehicles stack. `repair` then leaves every part pristine, so the
 vehicle is finished off from the sandbox:
 
-- Part condition from `CarGeneralCondition` (1 very low = 0-25, 2 low = 20-50,
-  3 normal = 60-100, 4 high = 75-100, 5 very high = 90-100).
+- Part condition via the vanilla `BaseVehicle.setGeneralPartCondition` path
+  (the one the randomized-world vehicle stories use), so the sandbox
+  `CarGeneralCondition` multiplier (1 very low ... 5 very high) is applied to a
+  100-condition base with the default damage roll.
 - Fuel from `ChanceHasGas` (20/45/95%) and `InitialGas`, using the vanilla
   `Vehicles.Create.GasTank` range logic.
 - Battery charge set to the rolled part condition, so it is not always 100%.
